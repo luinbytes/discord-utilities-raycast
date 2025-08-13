@@ -12,7 +12,8 @@ Local-first, ToS-safe utilities for launching and navigating Discord on Windows 
 ## Features (MVP)
 - Pinned Links: user-managed list of `discord://` deep links (servers/channels/DMs). Search by name or tags.
   - You can paste a full `discord://` link, or provide Server/Channel/DM IDs and the command will compose the link for you.
-- Bookmarks: save deep links to specific messages (guild or DM) and jump back any time.
+- Bookmarks: save links to specific messages (guild or DM) and jump back any time.
+  - Requires a full Discord message URL: `https://discord.com/channels/<guildOr@me>/<channel>/<message>`.
 - Profiles: open Stable / PTB / Canary. Copy resolved path when available.
 - Actions: open Discord (preferred flavor), open Settings, open Keybinds.
   - Settings subsections available: Voice & Video, Notifications, Appearance, Accessibility, Privacy & Safety, Advanced/Developer.
@@ -49,9 +50,8 @@ npm run dev
     - Channel: shows Guild (dropdown or manual) and Channel ID.
     - DM: shows DM Channel ID only (no Guild controls).
 - Secondary command: "Open Discord by IDs" (`src/discord-open-by-ids.tsx`).
-  - Single field: "Identifier or Link". Paste any of the supported formats below and it opens immediately.
+  - Single field: "Identifier or Link". Paste a Discord URL or supported ID formats to open immediately.
   - No saving required.
-  - This command allows you to open Discord with specific IDs without having to save a pin.
 
 ## Preferences
 - Preferred Flavor: stable (default) | ptb | canary

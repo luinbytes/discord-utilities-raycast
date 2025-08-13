@@ -93,33 +93,19 @@ function BookmarkForm(props: { initial?: Bookmark; onSubmit: (bm: Bookmark) => P
 
   const [name, setName] = useState(initial?.name ?? "");
   const [link, setLink] = useState(initial?.link ?? "");
-  const [identifier, setIdentifier] = useState("");
-  const [guildId, setGuildId] = useState("");
-  const [channelId, setChannelId] = useState("");
-  const [messageId, setMessageId] = useState("");
   const [tags, setTags] = useState<string>((initial?.tags || []).join(", "));
 
   const handleSubmit = async () => {
-    let final = link.trim();
-    // Priority 1: single identifier or link field
-    if (!final && identifier.trim()) {
-      const parsed = parseDiscordInput(identifier.trim());
-      if (parsed) final = parsed;
-    }
-    if (!final) {
-      if (guildId.trim() && channelId.trim() && messageId.trim()) {
-        final = require("./utils/discord").makeGuildMessageLink(guildId.trim(), channelId.trim(), messageId.trim());
-      } else if (!guildId.trim() && channelId.trim() && messageId.trim()) {
-        final = require("./utils/discord").makeDmMessageLink(channelId.trim(), messageId.trim());
-      }
-    }
-    if (!isDiscordDeepLink(final)) {
-      await showToast(Toast.Style.Failure, "Invalid Link", "Provide a discord:// link or IDs for guild/channel/message or DM channel/message.");
+    const final = link.trim();
+    const messageUrlRe = /^https?:\/\/(?:www\.)?discord\.com\/channels\/(?:@me|\d+)\/\d+\/\d+$/i;
+    if (!messageUrlRe.test(final)) {
+      await showToast(Toast.Style.Failure, "Invalid Message Link", "Paste a full https://discord.com/channels/<guildOr@me>/<channel>/<message> URL.");
       return;
     }
+
     const bm: Bookmark = {
       id: initial?.id ?? genId(),
-      name: name.trim() || "Untitled",
+      name: name.trim() || "Message",
       link: final,
       tags: tags
         .split(",")
@@ -139,31 +125,15 @@ function BookmarkForm(props: { initial?: Bookmark; onSubmit: (bm: Bookmark) => P
         </ActionPanel>
       }
     >
-      <Form.TextField id="identifier" title="Identifier or Link" placeholder="discord link, https link, IDs (e.g. 123/456[/789]), @me/456, dm:456" value={identifier} onChange={setIdentifier} />
-      <Form.Description title="Tip" text="Enter any channel/DM/server identifier; we'll resolve it automatically. Fields below are optional fallbacks." />
       <Form.TextField id="name" title="Name" placeholder="e.g., Important message" value={name} onChange={setName} />
       <Form.Separator />
-      <Form.Description title="Compose by IDs (optional)" text="Guild+Channel+Message for servers, Channel+Message for DMs. Leave Guild empty for DMs." />
-      <Form.TextField id="guildId" title="Guild ID (server)" placeholder="e.g., 123... (leave empty for DM)" value={guildId} onChange={setGuildId} />
-      <Form.TextField id="channelId" title="Channel ID / DM Channel ID" placeholder="e.g., 456..." value={channelId} onChange={setChannelId} />
-      <Form.TextField id="messageId" title="Message ID" placeholder="e.g., 789..." value={messageId} onChange={setMessageId} />
+      <Form.Description title="Message Link" text="Paste the full Discord message URL (e.g., https://discord.com/channels/<guildOr@me>/<channel>/<message>)." />
+      <Form.TextField id="link" title="Message URL" placeholder="https://discord.com/channels/<guildOr@me>/<channel>/<message>" value={link} onChange={setLink} />
       <Form.Separator />
-      <Form.TextField id="link" title="Link (optional)" placeholder="discord://-/channels/<g>/<c>/<m> or @me/<c>/<m>" value={link} onChange={setLink} />
       <Form.TextField id="tags" title="Tags" placeholder="comma, separated, tags" value={tags} onChange={setTags} />
     </Form>
   );
 }
-/*
-  Discord Utilities (Windows) — unified command
-  Sections:
-  - Pinned Links: user-managed discord:// deep links
-  - Profiles: open Stable / PTB / Canary
-  - Actions: open Discord (preferred), Settings, Keybinds
-
-  Notes / Future Enhancements:
-  - Consider mute/deafen via user-configured global hotkeys (launched via a helper exe).
-  - Potential bot-based discovery of servers/channels — out of scope for MVP.
-*/
 
 import {
   Action,
@@ -591,6 +561,13 @@ function ProfilesSection(props: { paths: { stable?: string; ptb?: string; canary
   );
 }
 
+/*
+  Discord Utilities (Windows) — unified command
+  Sections:
+  - Pinned Links: user-managed discord:// deep links
+  - Profiles: open Stable / PTB / Canary
+  - Actions: open Discord (preferred), Settings, Keybinds
+*/
 function ActionsSection(props: { onOpenPreferred: () => Promise<void>; settingsUrl: string; keybindsUrl: string }) {
   const { onOpenPreferred, settingsUrl, keybindsUrl } = props;
   const { getSettingsSubLink } = require("./utils/discord");
@@ -698,13 +675,21 @@ function PinForm(props: {
       try {
         const raw = await LocalStorage.getItem<string>(SAVED_GUILDS_KEY);
         if (!raw) {
-          setSavedGuilds([]);
+          // If no saved guilds yet, still make sure default guild appears
+          const initial: SavedGuild[] = props.defaultGuildId
+            ? [{ id: props.defaultGuildId, name: props.defaultGuildName || props.defaultGuildId }]
+            : [];
+          setSavedGuilds(initial);
           return;
         }
         const parsed = JSON.parse(raw);
         // Backward compatibility: if it was ["gid", ...], convert to objects
         if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
-          const converted: SavedGuild[] = parsed.map((id: string) => ({ id, name: id }));
+          let converted: SavedGuild[] = parsed.map((id: string) => ({ id, name: id }));
+          // Ensure default guild is present
+          if (props.defaultGuildId && !converted.find((g) => g.id === props.defaultGuildId)) {
+            converted = [...converted, { id: props.defaultGuildId, name: props.defaultGuildName || props.defaultGuildId }];
+          }
           setSavedGuilds(converted);
           await LocalStorage.setItem(SAVED_GUILDS_KEY, JSON.stringify(converted));
         } else if (Array.isArray(parsed)) {
@@ -725,19 +710,32 @@ function PinForm(props: {
               const gid = extractGuildId(sp.link);
               if (gid) nameByGid.set(gid, sp.name || gid);
             }
-            const enriched = objs.map((g) => (g.name === g.id && nameByGid.get(g.id) ? { ...g, name: nameByGid.get(g.id)! } : g));
+            let enriched = objs.map((g) => (g.name === g.id && nameByGid.get(g.id) ? { ...g, name: nameByGid.get(g.id)! } : g));
+            // Ensure default guild is present
+            if (props.defaultGuildId && !enriched.find((g) => g.id === props.defaultGuildId)) {
+              enriched = [...enriched, { id: props.defaultGuildId, name: props.defaultGuildName || props.defaultGuildId }];
+            }
             setSavedGuilds(enriched);
             if (JSON.stringify(enriched) !== JSON.stringify(objs)) {
               await LocalStorage.setItem(SAVED_GUILDS_KEY, JSON.stringify(enriched));
             }
           } catch {
-            setSavedGuilds(objs);
+            const list = props.defaultGuildId && !objs.find((g) => g.id === props.defaultGuildId)
+              ? [...objs, { id: props.defaultGuildId, name: props.defaultGuildName || props.defaultGuildId }]
+              : objs;
+            setSavedGuilds(list);
           }
         } else {
-          setSavedGuilds([]);
+          const initial: SavedGuild[] = props.defaultGuildId
+            ? [{ id: props.defaultGuildId, name: props.defaultGuildName || props.defaultGuildId }]
+            : [];
+          setSavedGuilds(initial);
         }
       } catch {
-        setSavedGuilds([]);
+        const fallback: SavedGuild[] = props.defaultGuildId
+          ? [{ id: props.defaultGuildId, name: props.defaultGuildName || props.defaultGuildId }]
+          : [];
+        setSavedGuilds(fallback);
       }
     })();
   }, []);
@@ -818,15 +816,24 @@ function PinForm(props: {
             : "Provide the DM Channel ID to build the link."
         }
       />
-      {type === "channel" && savedGuilds.length > 0 ? (
+      {type === "channel" && (savedGuilds.length > 0 || props.defaultGuildId) ? (
         <>
           <Form.Dropdown id="guildChoice" title="Guild" value={guildChoice} onChange={(v) => {
             setGuildChoice(v);
             if (v !== "custom") setGuildId(v);
           }}>
-            {savedGuilds.map((g) => (
-              <Form.Dropdown.Item key={g.id} value={g.id} title={g.name} />
-            ))}
+            {(() => {
+              const options: { id: string; name: string }[] = [];
+              if (props.defaultGuildId) {
+                options.push({ id: props.defaultGuildId, name: props.defaultGuildName || props.defaultGuildId });
+              }
+              for (const g of savedGuilds) {
+                if (!options.find((o) => o.id === g.id)) options.push(g);
+              }
+              return options.map((g) => (
+                <Form.Dropdown.Item key={g.id} value={g.id} title={g.name} />
+              ));
+            })()}
             <Form.Dropdown.Item value="custom" title="Enter Manually" />
           </Form.Dropdown>
           {guildChoice === "custom" ? (
