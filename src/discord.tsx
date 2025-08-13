@@ -355,7 +355,6 @@ function PinnedSection(props: {
             <List.Item
               key={pin.id}
               title={pin.name}
-              subtitle={pin.type.toUpperCase()}
               accessories={(pin.tags || []).map((t) => ({ tag: t }))}
               keywords={pin.tags}
               icon={Icon.Link}
@@ -394,7 +393,6 @@ function PinnedSection(props: {
             <List.Item
               key={pin.id}
               title={pin.name}
-              subtitle={pin.type.toUpperCase()}
               accessories={(pin.tags || []).map((t) => ({ tag: t }))}
               keywords={pin.tags}
               icon={Icon.Link}
@@ -514,22 +512,22 @@ function ActionsSection(props: { onOpenPreferred: () => Promise<void>; settingsU
       />
       {/* Settings subsections */}
       {[
-        { key: "voice", title: "Settings: Voice & Video" },
-        { key: "notifications", title: "Settings: Notifications" },
-        { key: "appearance", title: "Settings: Appearance" },
-        { key: "accessibility", title: "Settings: Accessibility" },
-        { key: "privacy", title: "Settings: Privacy & Safety" },
-        { key: "advanced", title: "Settings: Advanced / Developer" },
+        { key: "voice", title: "Settings: Voice & Video", icon: Icon.Microphone },
+        { key: "notifications", title: "Settings: Notifications", icon: Icon.Bell },
+        { key: "appearance", title: "Settings: Appearance", icon: Icon.Eye },
+        { key: "accessibility", title: "Settings: Accessibility", icon: Icon.Person },
+        { key: "privacy", title: "Settings: Privacy & Safety", icon: Icon.Lock },
+        { key: "advanced", title: "Settings: Advanced / Developer", icon: Icon.Terminal },
       ].map((s) => (
         <List.Item
           key={s.key}
           title={s.title}
-          icon={Icon.Gear}
+          icon={s.icon}
           actions={
             <ActionPanel>
               <Action
                 title={`Open ${s.title}`}
-                icon={Icon.Gear}
+                icon={s.icon}
                 onAction={async () => {
                   const url = getSettingsSubLink(s.key as any);
                   await openDeepLink(url);
