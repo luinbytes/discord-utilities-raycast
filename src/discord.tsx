@@ -1,0 +1,294 @@
+/*
+  Discord Utilities (Windows) — unified command
+  Sections:
+  - Pinned Links: user-managed discord:// deep links
+  - Profiles: open Stable / PTB / Canary
+  - Actions: open Discord (preferred), Settings, Keybinds
+
+  Notes / Future Enhancements:
+  - Consider mute/deafen via user-configured global hotkeys (launched via a helper exe).
+  - Potential bot-based discovery of servers/channels — out of scope for MVP.
+*/
+
+import {
+  Action,
+  ActionPanel,
+  Form,
+  Icon,
+  List,
+  Toast,
+  confirmAlert,
+  getPreferenceValues,
+  showToast,
+  useNavigation,
+} from "@raycast/api";
+import { LocalStorage } from "@raycast/api";
+import { useEffect, useMemo, useState } from "react";
+import { getKeybindsLink, getSettingsLink, openDeepLink, openDiscord, resolveDiscordPaths } from "./utils/discord";
+import type { InstallFlavor, PinnedLink, Preferences, PinType } from "./types";
+// Simple ID generator to avoid extra dependencies
+function genId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const PINS_KEY = "pinnedLinks";
+
+export default function Command() {
+  const preferences = getPreferenceValues<Preferences>();
+
+  const [pins, setPins] = useState<PinnedLink[]>([]);
+  const [paths, setPaths] = useState<{ stable?: string; ptb?: string; canary?: string }>({});
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load pins and resolve paths at start
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await LocalStorage.getItem<string>(PINS_KEY);
+        setPins(raw ? (JSON.parse(raw) as PinnedLink[]) : []);
+      } catch {
+        setPins([]);
+      }
+      try {
+        const resolved = await resolveDiscordPaths(preferences);
+        setPaths(resolved);
+      } catch (e: unknown) {
+        // Best-effort: paths may remain undefined; actions will show toasts if missing
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  const onSavePins = async (next: PinnedLink[]) => {
+    setPins(next);
+    await LocalStorage.setItem(PINS_KEY, JSON.stringify(next));
+  };
+
+  const onRemovePin = async (id: string) => {
+    const ok = await confirmAlert({ title: "Remove Pin?", message: "This will delete the pinned link." });
+    if (!ok) return;
+    const next = pins.filter((p) => p.id !== id);
+    await onSavePins(next);
+  };
+
+  const openPreferred = async () => {
+    await openDiscord(preferences.preferredFlavor, paths[preferences.preferredFlavor]);
+  };
+
+  const settingsUrl = useMemo(() => getSettingsLink(), []);
+  const keybindsUrl = useMemo(() => getKeybindsLink(), []);
+  const showProfiles = !preferences?.preferredFlavor; // hide profiles once a preferred flavor is chosen
+
+  return (
+    <List isLoading={isLoading} searchBarPlaceholder="Search pins by name or tag">
+      <PinnedSection pins={pins} onSave={onSavePins} onRemove={onRemovePin} />
+      {showProfiles ? <ProfilesSection paths={paths} /> : null}
+      <ActionsSection onOpenPreferred={openPreferred} settingsUrl={settingsUrl} keybindsUrl={keybindsUrl} />
+    </List>
+  );
+}
+
+function PinnedSection(props: {
+  pins: PinnedLink[];
+  onSave: (next: PinnedLink[]) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
+}) {
+  const { pins, onSave, onRemove } = props;
+  const { push } = useNavigation();
+
+  const onCreate = () => push(<PinForm onSubmit={async (pin) => onSave([...pins, pin])} />);
+
+  const onEdit = (pin: PinnedLink) =>
+    push(
+      <PinForm
+        initial={pin}
+        onSubmit={async (updated) => {
+          const next = pins.map((p) => (p.id === updated.id ? updated : p));
+          await onSave(next);
+        }}
+      />
+    );
+
+  return (
+    <List.Section title="Pinned Links" subtitle={pins.length ? `${pins.length}` : undefined}>
+      <List.Item
+        title="Add Pin"
+        icon={Icon.Plus}
+        accessories={[{ text: "Create a new pin" }]}
+        actions={
+          <ActionPanel>
+            <Action title="Add Pin" icon={Icon.Plus} onAction={onCreate} />
+          </ActionPanel>
+        }
+      />
+      {pins.map((pin) => (
+        <List.Item
+          key={pin.id}
+          title={pin.name}
+          subtitle={pin.type.toUpperCase()}
+          accessories={(pin.tags || []).map((t) => ({ tag: t }))}
+          keywords={pin.tags}
+          icon={Icon.Link}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Open"
+                icon={Icon.ArrowRight}
+                onAction={async () => {
+                  if (!pin.link.toLowerCase().startsWith("discord://")) {
+                    await showToast(Toast.Style.Failure, "Invalid Link", "Must start with discord://");
+                    return;
+                  }
+                  await openDeepLink(pin.link);
+                  await showToast(Toast.Style.Success, `Opened ${pin.name}`);
+                }}
+              />
+              <Action.CopyToClipboard title="Copy Link" content={pin.link} />
+              <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(pin)} />
+              <Action
+                title="Remove"
+                icon={Icon.Trash}
+                style={Action.Style.Destructive}
+                onAction={() => onRemove(pin.id)}
+              />
+            </ActionPanel>
+          }
+        />
+      ))}
+    </List.Section>
+  );
+}
+
+function ProfilesSection(props: { paths: { stable?: string; ptb?: string; canary?: string } }) {
+  const { paths } = props;
+
+  const Item = ({ flavor, path, title }: { flavor: InstallFlavor; path?: string; title: string }) => (
+    <List.Item
+      title={title}
+      subtitle={flavor.toUpperCase()}
+      icon={Icon.AppWindow}
+      accessories={[{ text: path ? "Resolved" : "Not Found" }]}
+      actions={
+        <ActionPanel>
+          <Action
+            title="Open"
+            icon={Icon.ArrowRight}
+            onAction={async () => {
+              await openDiscord(flavor, path);
+            }}
+          />
+          {path ? <Action.CopyToClipboard title="Copy Path" content={path} /> : null}
+        </ActionPanel>
+      }
+    />
+  );
+
+  return (
+    <List.Section title="Profiles">
+      <Item flavor="stable" path={paths.stable} title="Discord Stable" />
+      <Item flavor="ptb" path={paths.ptb} title="Discord PTB" />
+      <Item flavor="canary" path={paths.canary} title="Discord Canary" />
+    </List.Section>
+  );
+}
+
+function ActionsSection(props: { onOpenPreferred: () => Promise<void>; settingsUrl: string; keybindsUrl: string }) {
+  const { onOpenPreferred, settingsUrl, keybindsUrl } = props;
+  return (
+    <List.Section title="Actions">
+      <List.Item
+        title="Open Discord (Preferred)"
+        icon={Icon.Play}
+        actions={
+          <ActionPanel>
+            <Action title="Open" icon={Icon.ArrowRight} onAction={onOpenPreferred} />
+          </ActionPanel>
+        }
+      />
+      <List.Item
+        title="Open Settings"
+        icon={Icon.Gear}
+        actions={
+          <ActionPanel>
+            <Action
+              title="Open Settings"
+              icon={Icon.Gear}
+              onAction={async () => {
+                await openDeepLink(settingsUrl);
+                await showToast(Toast.Style.Success, "Opened Discord Settings");
+              }}
+            />
+            <Action.CopyToClipboard title="Copy Settings Link" content={settingsUrl} />
+          </ActionPanel>
+        }
+      />
+      <List.Item
+        title="Open Keybinds"
+        icon={Icon.CommandSymbol}
+        actions={
+          <ActionPanel>
+            <Action
+              title="Open Keybinds"
+              icon={Icon.CommandSymbol}
+              onAction={async () => {
+                await openDeepLink(keybindsUrl);
+                await showToast(Toast.Style.Success, "Opened Discord Keybinds");
+              }}
+            />
+            <Action.CopyToClipboard title="Copy Keybinds Link" content={keybindsUrl} />
+          </ActionPanel>
+        }
+      />
+    </List.Section>
+  );
+}
+
+function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => Promise<void> }) {
+  const { initial, onSubmit } = props;
+  const { pop } = useNavigation();
+
+  const [name, setName] = useState(initial?.name ?? "");
+  const [type, setType] = useState<PinType>(initial?.type ?? "channel");
+  const [link, setLink] = useState(initial?.link ?? "");
+  const [tags, setTags] = useState<string>((initial?.tags || []).join(", "));
+
+  const handleSubmit = async () => {
+    if (!link.toLowerCase().startsWith("discord://")) {
+      await showToast(Toast.Style.Failure, "Invalid Link", "Must start with discord://");
+      return;
+    }
+    const pin: PinnedLink = {
+      id: initial?.id ?? genId(),
+      name: name.trim() || "Untitled",
+      type,
+      link: link.trim(),
+      tags: tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+    };
+    await onSubmit(pin);
+    await showToast(Toast.Style.Success, initial ? "Pin Updated" : "Pin Added");
+    pop();
+  };
+
+  return (
+    <Form
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title={initial ? "Save Changes" : "Add Pin"} onSubmit={handleSubmit} />
+        </ActionPanel>
+      }
+    >
+      <Form.TextField id="name" title="Name" placeholder="e.g., #general — MyServer" value={name} onChange={setName} />
+      <Form.Dropdown id="type" title="Type" value={type} onChange={(v) => setType(v as PinType)}>
+        <Form.Dropdown.Item value="server" title="Server" />
+        <Form.Dropdown.Item value="channel" title="Channel" />
+        <Form.Dropdown.Item value="dm" title="Direct Message" />
+      </Form.Dropdown>
+      <Form.TextField id="link" title="Link" placeholder="discord://-/channels/<guild>/<channel>" value={link} onChange={setLink} />
+      <Form.TextField id="tags" title="Tags" placeholder="comma, separated, tags" value={tags} onChange={setTags} />
+    </Form>
+  );
+}
