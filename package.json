@@ -35,6 +35,14 @@
       "mode": "view",
       "path": "src/discord-add-pin.tsx",
       "icon": "command-icon.png"
+    },
+    {
+      "name": "discord-open-by-ids",
+      "title": "Open Discord by IDs",
+      "description": "Open a server, channel, DM, or message by IDs without saving.",
+      "mode": "view",
+      "path": "src/discord-open-by-ids.tsx",
+      "icon": "command-icon.png"
     }
   ],
   "preferences": [
