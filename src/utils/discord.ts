@@ -126,3 +126,19 @@ export function getSettingsLink(): string {
 export function getKeybindsLink(): string {
   return "discord://-/settings/keybinds";
 }
+
+export function makeServerLink(guildId: string): string {
+  return `discord://-/channels/${guildId}`;
+}
+
+export function makeChannelLink(guildId: string, channelId: string): string {
+  return `discord://-/channels/${guildId}/${channelId}`;
+}
+
+export function makeDmLink(channelId: string): string {
+  return `discord://-/channels/@me/${channelId}`;
+}
+
+export function isDiscordDeepLink(url: string): boolean {
+  return /^discord:\/\//i.test(url.trim());
+}

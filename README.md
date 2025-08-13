@@ -3,6 +3,7 @@ Local-first, ToS-safe utilities for launching and navigating Discord on Windows 
 
 ## Features (MVP)
 - Pinned Links: user-managed list of `discord://` deep links (servers/channels/DMs). Search by name or tags.
+  - You can paste a full `discord://` link, or provide Server/Channel/DM IDs and the command will compose the link for you.
 - Profiles: open Stable / PTB / Canary. Copy resolved path when available.
 - Actions: open Discord (preferred flavor), open Settings, open Keybinds.
 - LocalStorage: pins and preferences stored locally via Raycast. No tokens. No network calls.
@@ -26,6 +27,7 @@ npm run dev
   - Profiles: Open Stable/PTB/Canary, Copy Path.
   - Global actions: Open Discord (preferred), Open Settings, Open Keybinds.
 - Secondary command: "Add Discord Pin" (`src/discord-add-pin.tsx`).
+  - The form accepts Guild ID and Channel/DM Channel ID to build the correct deep link if you don't paste a full URL.
 
 ## Preferences
 - Preferred Flavor: stable (default) | ptb | canary

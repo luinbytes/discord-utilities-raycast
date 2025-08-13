@@ -24,7 +24,17 @@ import {
 } from "@raycast/api";
 import { LocalStorage } from "@raycast/api";
 import { useEffect, useMemo, useState } from "react";
-import { getKeybindsLink, getSettingsLink, openDeepLink, openDiscord, resolveDiscordPaths } from "./utils/discord";
+import {
+  getKeybindsLink,
+  getSettingsLink,
+  openDeepLink,
+  openDiscord,
+  resolveDiscordPaths,
+  makeServerLink,
+  makeChannelLink,
+  makeDmLink,
+  isDiscordDeepLink,
+} from "./utils/discord";
 import type { InstallFlavor, PinnedLink, Preferences, PinType } from "./types";
 // Simple ID generator to avoid extra dependencies
 function genId() {
@@ -252,17 +262,32 @@ function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => P
   const [type, setType] = useState<PinType>(initial?.type ?? "channel");
   const [link, setLink] = useState(initial?.link ?? "");
   const [tags, setTags] = useState<string>((initial?.tags || []).join(", "));
+  const [guildId, setGuildId] = useState<string>("");
+  const [channelId, setChannelId] = useState<string>("");
 
   const handleSubmit = async () => {
-    if (!link.toLowerCase().startsWith("discord://")) {
-      await showToast(Toast.Style.Failure, "Invalid Link", "Must start with discord://");
+    let finalLink = link.trim();
+
+    // Accept either a full discord:// link, or compose from IDs based on type
+    if (!finalLink) {
+      if (type === "server" && guildId.trim()) {
+        finalLink = makeServerLink(guildId.trim());
+      } else if (type === "channel" && guildId.trim() && channelId.trim()) {
+        finalLink = makeChannelLink(guildId.trim(), channelId.trim());
+      } else if (type === "dm" && channelId.trim()) {
+        finalLink = makeDmLink(channelId.trim());
+      }
+    }
+
+    if (!isDiscordDeepLink(finalLink)) {
+      await showToast(Toast.Style.Failure, "Invalid Link", "Provide a discord:// link or valid IDs for the selected type.");
       return;
     }
     const pin: PinnedLink = {
       id: initial?.id ?? genId(),
       name: name.trim() || "Untitled",
       type,
-      link: link.trim(),
+      link: finalLink,
       tags: tags
         .split(",")
         .map((t) => t.trim())
@@ -287,7 +312,12 @@ function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => P
         <Form.Dropdown.Item value="channel" title="Channel" />
         <Form.Dropdown.Item value="dm" title="Direct Message" />
       </Form.Dropdown>
-      <Form.TextField id="link" title="Link" placeholder="discord://-/channels/<guild>/<channel>" value={link} onChange={setLink} />
+      <Form.Separator />
+      <Form.Description title="Compose by IDs (optional)" text="Provide IDs to auto-build the link if you don't paste a full discord:// URL." />
+      <Form.TextField id="guildId" title="Guild ID" placeholder="e.g., 123456789012345678" value={guildId} onChange={setGuildId} />
+      <Form.TextField id="channelId" title="Channel ID / DM Channel ID" placeholder="e.g., 123456789012345678" value={channelId} onChange={setChannelId} />
+      <Form.Separator />
+      <Form.TextField id="link" title="Link (optional)" placeholder="discord://-/channels/<guild>/<channel>" value={link} onChange={setLink} />
       <Form.TextField id="tags" title="Tags" placeholder="comma, separated, tags" value={tags} onChange={setTags} />
     </Form>
   );
