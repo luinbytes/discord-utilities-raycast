@@ -120,8 +120,11 @@ function PinnedSection(props: {
       />
     );
 
+  const dmPins = pins.filter((p) => p.type === "dm");
+  const otherPins = pins.filter((p) => p.type !== "dm");
+
   return (
-    <List.Section title="Pinned Links" subtitle={pins.length ? `${pins.length}` : undefined}>
+    <>
       <List.Item
         title="Add Pin"
         icon={Icon.Plus}
@@ -132,41 +135,85 @@ function PinnedSection(props: {
           </ActionPanel>
         }
       />
-      {pins.map((pin) => (
-        <List.Item
-          key={pin.id}
-          title={pin.name}
-          subtitle={pin.type.toUpperCase()}
-          accessories={(pin.tags || []).map((t) => ({ tag: t }))}
-          keywords={pin.tags}
-          icon={Icon.Link}
-          actions={
-            <ActionPanel>
-              <Action
-                title="Open"
-                icon={Icon.ArrowRight}
-                onAction={async () => {
-                  if (!pin.link.toLowerCase().startsWith("discord://")) {
-                    await showToast(Toast.Style.Failure, "Invalid Link", "Must start with discord://");
-                    return;
-                  }
-                  await openDeepLink(pin.link);
-                  await showToast(Toast.Style.Success, `Opened ${pin.name}`);
-                }}
-              />
-              <Action.CopyToClipboard title="Copy Link" content={pin.link} />
-              <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(pin)} />
-              <Action
-                title="Remove"
-                icon={Icon.Trash}
-                style={Action.Style.Destructive}
-                onAction={() => onRemove(pin.id)}
-              />
-            </ActionPanel>
-          }
-        />
-      ))}
-    </List.Section>
+
+      {dmPins.length > 0 && (
+        <List.Section title="Direct Messages" subtitle={`${dmPins.length}`}>
+          {dmPins.map((pin) => (
+            <List.Item
+              key={pin.id}
+              title={pin.name}
+              subtitle={pin.type.toUpperCase()}
+              accessories={(pin.tags || []).map((t) => ({ tag: t }))}
+              keywords={pin.tags}
+              icon={Icon.Link}
+              actions={
+                <ActionPanel>
+                  <Action
+                    title="Open"
+                    icon={Icon.ArrowRight}
+                    onAction={async () => {
+                      if (!pin.link.toLowerCase().startsWith("discord://")) {
+                        await showToast(Toast.Style.Failure, "Invalid Link", "Must start with discord://");
+                        return;
+                      }
+                      await openDeepLink(pin.link);
+                      await showToast(Toast.Style.Success, `Opened ${pin.name}`);
+                    }}
+                  />
+                  <Action.CopyToClipboard title="Copy Link" content={pin.link} />
+                  <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(pin)} />
+                  <Action
+                    title="Remove"
+                    icon={Icon.Trash}
+                    style={Action.Style.Destructive}
+                    onAction={() => onRemove(pin.id)}
+                  />
+                </ActionPanel>
+              }
+            />
+          ))}
+        </List.Section>
+      )}
+
+      {otherPins.length > 0 && (
+        <List.Section title="Servers & Channels" subtitle={`${otherPins.length}`}>
+          {otherPins.map((pin) => (
+            <List.Item
+              key={pin.id}
+              title={pin.name}
+              subtitle={pin.type.toUpperCase()}
+              accessories={(pin.tags || []).map((t) => ({ tag: t }))}
+              keywords={pin.tags}
+              icon={Icon.Link}
+              actions={
+                <ActionPanel>
+                  <Action
+                    title="Open"
+                    icon={Icon.ArrowRight}
+                    onAction={async () => {
+                      if (!pin.link.toLowerCase().startsWith("discord://")) {
+                        await showToast(Toast.Style.Failure, "Invalid Link", "Must start with discord://");
+                        return;
+                      }
+                      await openDeepLink(pin.link);
+                      await showToast(Toast.Style.Success, `Opened ${pin.name}`);
+                    }}
+                  />
+                  <Action.CopyToClipboard title="Copy Link" content={pin.link} />
+                  <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(pin)} />
+                  <Action
+                    title="Remove"
+                    icon={Icon.Trash}
+                    style={Action.Style.Destructive}
+                    onAction={() => onRemove(pin.id)}
+                  />
+                </ActionPanel>
+              }
+            />
+          ))}
+        </List.Section>
+      )}
+    </>
   );
 }
 
