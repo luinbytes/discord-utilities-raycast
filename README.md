@@ -1,11 +1,21 @@
+## Auto-detecting Discord installations
+- On first run, the extension resolves default install paths under `%LOCALAPPDATA%`:
+  - Stable: `%LocalAppData%/Discord/Update.exe`
+  - PTB: `%LocalAppData%/DiscordPTB/Update.exe`
+  - Canary: `%LocalAppData%/DiscordCanary/Update.exe`
+- If exactly one installation is found, it is selected automatically as the chosen flavor.
+- If multiple are found and you have not chosen one before, a selection list appears to choose which to use. Your choice is stored locally and used going forward.
+- You can still set explicit overrides in Preferences for each flavor if your install paths differ.
 # Raycast Discord Utilities (Windows)
 Local-first, ToS-safe utilities for launching and navigating Discord on Windows via Raycast.
 
 ## Features (MVP)
 - Pinned Links: user-managed list of `discord://` deep links (servers/channels/DMs). Search by name or tags.
   - You can paste a full `discord://` link, or provide Server/Channel/DM IDs and the command will compose the link for you.
+- Bookmarks: save deep links to specific messages (guild or DM) and jump back any time.
 - Profiles: open Stable / PTB / Canary. Copy resolved path when available.
 - Actions: open Discord (preferred flavor), open Settings, open Keybinds.
+  - Settings subsections available: Voice & Video, Notifications, Appearance, Accessibility, Privacy & Safety, Advanced/Developer.
 - LocalStorage: pins and preferences stored locally via Raycast. No tokens. No network calls.
 
 ## Requirements
@@ -21,16 +31,21 @@ npm run dev
 
 ## Usage
 - Command: "Discord Utilities" (`src/discord.tsx`).
-  - Sections: Pinned Links (first), Profiles, Actions.
+  - Sections: Bookmarks, Pinned Links, Profiles (hidden after choosing flavor), Actions.
   - Profiles section is hidden once a Preferred Flavor is set in Preferences.
   - Pinned item actions: Open, Copy Link, Edit, Remove.
+  - Bookmarks: Open, Copy Link, Edit, Remove.
   - Profiles: Open Stable/PTB/Canary, Copy Path.
-  - Global actions: Open Discord (preferred), Open Settings, Open Keybinds.
+  - Global actions: Open Discord (preferred), Open Settings, Open Keybinds, plus Settings subsections.
 - Secondary command: "Add Discord Pin" (`src/discord-add-pin.tsx`).
   - The form accepts Guild ID and Channel/DM Channel ID to build the correct deep link if you don't paste a full URL.
+- Secondary command: "Open Discord by IDs" (`src/discord-open-by-ids.tsx`).
+  - Quickly open a server, channel, DM, or message by IDs without saving a pin.
+  - This command allows you to open Discord with specific IDs without having to save a pin.
 
 ## Preferences
 - Preferred Flavor: stable (default) | ptb | canary
+  - Used to open Discord via Update.exe or the app executable if Update.exe is missing.
 - Optional overrides: Stable/PTB/Canary paths to `Update.exe` or `Discord*.exe`
 
 ## How it works

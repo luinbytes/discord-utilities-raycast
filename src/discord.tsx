@@ -58,6 +58,35 @@ function BookmarksSection(props: {
   );
 }
 
+function FlavorChooser(props: { options: InstallFlavor[]; onChoose: (f: InstallFlavor) => void | Promise<void> }) {
+  const { options, onChoose } = props;
+  const titles: Record<InstallFlavor, string> = { stable: "Discord (Stable)", ptb: "Discord PTB", canary: "Discord Canary" };
+  const icons: Record<InstallFlavor, Icon> = { stable: Icon.AppWindow, ptb: Icon.AppWindowGrid2x2, canary: Icon.AppWindowList } as any;
+  return (
+    <List searchBarPlaceholder="Choose your Discord installation">
+      <List.Section title="Multiple Installations Found" subtitle={`${options.length}`}>
+        {options.map((f) => (
+          <List.Item
+            key={f}
+            title={titles[f]}
+            icon={icons[f]}
+            actions={
+              <ActionPanel>
+                <Action
+                  title={`Use ${titles[f]}`}
+                  onAction={async () => {
+                    await onChoose(f);
+                  }}
+                />
+              </ActionPanel>
+            }
+          />
+        ))}
+      </List.Section>
+    </List>
+  );
+}
+
 function BookmarkForm(props: { initial?: Bookmark; onSubmit: (bm: Bookmark) => Promise<void> }) {
   const { initial, onSubmit } = props;
   const { pop } = useNavigation();
@@ -161,6 +190,7 @@ function genId() {
 
 const PINS_KEY = "pinnedLinks";
 const BOOKMARKS_KEY = "discordBookmarks";
+const CHOSEN_FLAVOR_KEY = "chosenFlavor";
 
 export default function Command() {
   const preferences = getPreferenceValues<Preferences>();
@@ -169,6 +199,9 @@ export default function Command() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [paths, setPaths] = useState<{ stable?: string; ptb?: string; canary?: string }>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [chosenFlavor, setChosenFlavor] = useState<InstallFlavor | undefined>(undefined);
+  const [needChooseFlavor, setNeedChooseFlavor] = useState(false);
+  const [availableFlavors, setAvailableFlavors] = useState<InstallFlavor[]>([]);
 
   // Load pins and resolve paths at start
   useEffect(() => {
@@ -186,8 +219,33 @@ export default function Command() {
         setBookmarks([]);
       }
       try {
+        const storedChosen = await LocalStorage.getItem<string>(CHOSEN_FLAVOR_KEY);
+        if (storedChosen === "stable" || storedChosen === "ptb" || storedChosen === "canary") {
+          setChosenFlavor(storedChosen);
+        }
+      } catch {
+        // ignore
+      }
+      try {
         const resolved = await resolveDiscordPaths(preferences);
         setPaths(resolved);
+        // Determine available installations
+        const found: InstallFlavor[] = (Object.entries(resolved) as [InstallFlavor, string | undefined][]) // typed cast
+          .filter(([, p]) => !!p)
+          .map(([k]) => k);
+        setAvailableFlavors(found);
+        // If no chosen flavor yet, auto-pick when exactly one is found; otherwise ask user
+        const hasChosen = !!(await LocalStorage.getItem<string>(CHOSEN_FLAVOR_KEY));
+        if (!hasChosen) {
+          if (found.length === 1) {
+            const only = found[0];
+            setChosenFlavor(only);
+            await LocalStorage.setItem(CHOSEN_FLAVOR_KEY, only);
+            await showToast(Toast.Style.Success, `Using ${only} Discord`);
+          } else if (found.length > 1) {
+            setNeedChooseFlavor(true);
+          }
+        }
       } catch (e: unknown) {
         // Best-effort: paths may remain undefined; actions will show toasts if missing
       } finally {
@@ -221,13 +279,28 @@ export default function Command() {
     await onSaveBookmarks(next);
   };
 
+  const effectiveFlavor: InstallFlavor = (chosenFlavor || preferences.preferredFlavor || "stable") as InstallFlavor;
   const openPreferred = async () => {
-    await openDiscord(preferences.preferredFlavor, paths[preferences.preferredFlavor]);
+    await openDiscord(effectiveFlavor, paths[effectiveFlavor]);
   };
 
   const settingsUrl = useMemo(() => getSettingsLink(), []);
   const keybindsUrl = useMemo(() => getKeybindsLink(), []);
-  const showProfiles = !preferences?.preferredFlavor; // hide profiles once a preferred flavor is chosen
+  const showProfiles = !(preferences?.preferredFlavor || chosenFlavor); // hide profiles once a flavor is chosen
+
+  if (needChooseFlavor) {
+    return (
+      <FlavorChooser
+        options={availableFlavors}
+        onChoose={async (f) => {
+          setChosenFlavor(f);
+          await LocalStorage.setItem(CHOSEN_FLAVOR_KEY, f);
+          setNeedChooseFlavor(false);
+          await showToast(Toast.Style.Success, `Using ${f} Discord`);
+        }}
+      />
+    );
+  }
 
   return (
     <List isLoading={isLoading} searchBarPlaceholder="Search pins by name or tag">
