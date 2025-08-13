@@ -36,7 +36,9 @@ async function fileExists(p?: string): Promise<boolean> {
   }
 }
 
-export async function resolveDiscordPaths(preferences: Preferences): Promise<{ stable?: string; ptb?: string; canary?: string }> {
+export async function resolveDiscordPaths(
+  preferences: Preferences,
+): Promise<{ stable?: string; ptb?: string; canary?: string }> {
   const lad = getLocalAppData();
 
   const stableDefaultUpdate = lad ? path.join(lad, "Discord", "Update.exe") : undefined;
@@ -104,8 +106,9 @@ export async function openDiscord(flavor?: InstallFlavor, overridePath?: string)
       stdio: "ignore",
     });
     child.unref();
-  } catch (e: any) {
-    await showToast(Toast.Style.Failure, "Failed to launch Discord", e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await showToast(Toast.Style.Failure, "Failed to launch Discord", msg);
   }
 }
 
@@ -114,8 +117,9 @@ export async function openDeepLink(url: string): Promise<void> {
   const { open } = await import("@raycast/api");
   try {
     await open(url);
-  } catch (e: any) {
-    await showToast(Toast.Style.Failure, "Failed to open link", e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await showToast(Toast.Style.Failure, "Failed to open link", msg);
   }
 }
 
@@ -181,7 +185,9 @@ export function parseDiscordInput(input: string): string | undefined {
         }
       }
     }
-  } catch {}
+  } catch {
+    // ignore URL parse errors; we'll fall through to other parsing strategies
+  }
 
   // Prefix hints
   const lower = raw.toLowerCase();

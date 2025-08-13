@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "discord-utilities",
-  "title": "Control your discord client with ease.",
-  "description": "Control your discord client with ease.",
+  "title": "Control Your Discord Client with Ease.",
+  "description": "Control Your Discord Client With Ease.",
   "icon": "command-icon.png",
   "author": "nazzy_wazzy_lu",
   "categories": [
@@ -23,7 +23,7 @@
     {
       "name": "discord",
       "title": "Discord Utilities",
-      "description": "Control your Discord client with ease.",
+      "description": "Control Your Discord Client With Ease.",
       "mode": "view",
       "path": "src/discord.tsx",
       "icon": "command-icon.png"

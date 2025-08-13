@@ -39,6 +39,8 @@ npm run dev
     - A Servers section shows each Server pin and all Channel pins grouped under their server (channels display an accessory tag with the server name).
     - Server items use a more fitting people icon.
   - Pinned item actions: Open, Copy Link, Edit, Remove.
+    - Removing a Server pin will prompt you to confirm and will also remove all Channel pins associated with that server.
+    - Remove actions are labeled explicitly by type: "Remove This Server Pin", "Remove This Channel Pin", and "Remove This DM Pin".
   - Bookmarks: Open, Copy Link, Edit, Remove.
   - Profiles: Open Stable/PTB/Canary, Copy Path.
   - Global actions: Open Discord (preferred), Open Settings, Open Keybinds, plus Settings subsections.

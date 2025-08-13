@@ -39,8 +39,9 @@ export default function AddPinCommand() {
       await LocalStorage.setItem(PINS_KEY, JSON.stringify(list));
       await showToast(Toast.Style.Success, "Pin Added");
       pop();
-    } catch (e: any) {
-      await showToast(Toast.Style.Failure, "Failed to save pin", e?.message ?? String(e));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await showToast(Toast.Style.Failure, "Failed to save pin", msg);
     }
   };
 
@@ -58,7 +59,13 @@ export default function AddPinCommand() {
         <Form.Dropdown.Item value="channel" title="Channel" />
         <Form.Dropdown.Item value="dm" title="Direct Message" />
       </Form.Dropdown>
-      <Form.TextField id="link" title="Link" placeholder="discord://-/channels/<guild>/<channel>" value={link} onChange={setLink} />
+      <Form.TextField
+        id="link"
+        title="Link"
+        placeholder="discord://-/channels/<guild>/<channel>"
+        value={link}
+        onChange={setLink}
+      />
       <Form.TextField id="tags" title="Tags" placeholder="comma, separated, tags" value={tags} onChange={setTags} />
     </Form>
   );
