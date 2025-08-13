@@ -350,8 +350,48 @@ function PinnedSection(props: {
     return m?.[1];
   };
   const extractGuildIdFromChannel = (link: string): string | undefined => {
-    const m = link.match(/discord:\/\/-\/channels\/(\d+)\/(\d+)/i);
+    const m = link.match(/discord:\/\/\-\/channels\/(\d+)\/(\d+)/i);
     return m?.[1];
+  };
+
+  // Reordering helpers
+  const applySwap = async (i: number, j: number) => {
+    if (i === j || i < 0 || j < 0 || i >= pins.length || j >= pins.length) return;
+    const next = [...pins];
+    const tmp = next[i];
+    next[i] = next[j];
+    next[j] = tmp;
+    await onSave(next);
+  };
+
+  const moveWithinFiltered = async (
+    targetId: string,
+    filter: (p: PinnedLink) => boolean,
+    mode: "up" | "down" | "top" | "bottom",
+  ) => {
+    const indices = pins.map((p, idx) => ({ p, idx })).filter(({ p }) => filter(p)).map(({ idx }) => idx);
+    const pos = indices.findIndex((idx) => pins[idx].id === targetId);
+    if (pos < 0) return;
+    if (mode === "top") return applySwap(indices[pos], indices[0]);
+    if (mode === "bottom") return applySwap(indices[pos], indices[indices.length - 1]);
+    if (mode === "up" && pos > 0) return applySwap(indices[pos], indices[pos - 1]);
+    if (mode === "down" && pos < indices.length - 1) return applySwap(indices[pos], indices[pos + 1]);
+  };
+
+  const moveDm = async (id: string, mode: "up" | "down" | "top" | "bottom") => {
+    await moveWithinFiltered(id, (p) => p.type === "dm", mode);
+  };
+
+  const moveChannelInGuild = async (
+    id: string,
+    guildId: string,
+    mode: "up" | "down" | "top" | "bottom",
+  ) => {
+    await moveWithinFiltered(
+      id,
+      (p) => p.type === "channel" && extractGuildIdFromChannel(p.link) === guildId,
+      mode,
+    );
   };
 
   // Build server map for grouping and display names
@@ -423,6 +463,20 @@ function PinnedSection(props: {
                   />
                   <Action.CopyToClipboard title="Copy Link" content={pin.link} />
                   <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(pin)} />
+                  <ActionPanel.Section title="Reorder DM">
+                    <Action title="Move Up" icon={Icon.ArrowUp} onAction={() => moveDm(pin.id, "up")} />
+                    <Action title="Move Down" icon={Icon.ArrowDown} onAction={() => moveDm(pin.id, "down")} />
+                    <Action
+                      title="Move to Top"
+                      icon={Icon.ChevronUp}
+                      onAction={() => moveDm(pin.id, "top")}
+                    />
+                    <Action
+                      title="Move to Bottom"
+                      icon={Icon.ChevronDown}
+                      onAction={() => moveDm(pin.id, "bottom")}
+                    />
+                  </ActionPanel.Section>
                   <Action
                     title="Remove This Dm Pin"
                     icon={Icon.Trash}
@@ -533,6 +587,40 @@ function PinnedSection(props: {
                         />
                         <Action.CopyToClipboard title="Copy Link" content={cp.link} />
                         <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(cp)} />
+                        <ActionPanel.Section title="Reorder Channel in Server">
+                          <Action
+                            title="Move Up"
+                            icon={Icon.ArrowUp}
+                            onAction={() => {
+                              const gid = extractGuildIdFromChannel(cp.link);
+                              if (gid) moveChannelInGuild(cp.id, gid, "up");
+                            }}
+                          />
+                          <Action
+                            title="Move Down"
+                            icon={Icon.ArrowDown}
+                            onAction={() => {
+                              const gid = extractGuildIdFromChannel(cp.link);
+                              if (gid) moveChannelInGuild(cp.id, gid, "down");
+                            }}
+                          />
+                          <Action
+                            title="Move to Top"
+                            icon={Icon.ChevronUp}
+                            onAction={() => {
+                              const gid = extractGuildIdFromChannel(cp.link);
+                              if (gid) moveChannelInGuild(cp.id, gid, "top");
+                            }}
+                          />
+                          <Action
+                            title="Move to Bottom"
+                            icon={Icon.ChevronDown}
+                            onAction={() => {
+                              const gid = extractGuildIdFromChannel(cp.link);
+                              if (gid) moveChannelInGuild(cp.id, gid, "bottom");
+                            }}
+                          />
+                        </ActionPanel.Section>
                         <Action
                           title="Remove This Channel Pin"
                           icon={Icon.Trash}
