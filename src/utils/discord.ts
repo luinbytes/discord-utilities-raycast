@@ -142,3 +142,43 @@ export function makeDmLink(channelId: string): string {
 export function isDiscordDeepLink(url: string): boolean {
   return /^discord:\/\//i.test(url.trim());
 }
+
+export function makeGuildMessageLink(guildId: string, channelId: string, messageId: string): string {
+  return `discord://-/channels/${guildId}/${channelId}/${messageId}`;
+}
+
+export function makeDmMessageLink(channelId: string, messageId: string): string {
+  return `discord://-/channels/@me/${channelId}/${messageId}`;
+}
+
+export type SettingsSubsection =
+  | "general"
+  | "keybinds"
+  | "voice"
+  | "notifications"
+  | "appearance"
+  | "accessibility"
+  | "privacy"
+  | "advanced";
+
+export function getSettingsSubLink(section: SettingsSubsection): string {
+  switch (section) {
+    case "keybinds":
+      return "discord://-/settings/keybinds";
+    case "voice":
+      return "discord://-/settings/voice";
+    case "notifications":
+      return "discord://-/settings/notifications";
+    case "appearance":
+      return "discord://-/settings/appearance";
+    case "accessibility":
+      return "discord://-/settings/accessibility";
+    case "privacy":
+      return "discord://-/settings/privacy";
+    case "advanced":
+      return "discord://-/settings/advanced";
+    case "general":
+    default:
+      return "discord://-/settings";
+  }
+}

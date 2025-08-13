@@ -1,3 +1,121 @@
+function BookmarksSection(props: {
+  bookmarks: Bookmark[];
+  onSave: (next: Bookmark[]) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
+}) {
+  const { bookmarks, onSave, onRemove } = props;
+  const { push } = useNavigation();
+
+  const onCreate = () => push(<BookmarkForm onSubmit={async (bm) => onSave([...(bookmarks || []), bm])} />);
+  const onEdit = (bm: Bookmark) =>
+    push(
+      <BookmarkForm
+        initial={bm}
+        onSubmit={async (updated) => {
+          const next = bookmarks.map((b) => (b.id === updated.id ? updated : b));
+          await onSave(next);
+        }}
+      />
+    );
+
+  return (
+    <List.Section title="Bookmarks" subtitle={bookmarks.length ? `${bookmarks.length}` : undefined}>
+      <List.Item
+        title="Add Bookmark"
+        icon={Icon.Bookmark}
+        accessories={[{ text: "Save a message link" }]}
+        actions={
+          <ActionPanel>
+            <Action title="Add Bookmark" icon={Icon.Bookmark} onAction={onCreate} />
+          </ActionPanel>
+        }
+      />
+      {bookmarks.map((bm) => (
+        <List.Item
+          key={bm.id}
+          title={bm.name}
+          icon={Icon.Bookmark}
+          accessories={(bm.tags || []).map((t) => ({ tag: t }))}
+          keywords={bm.tags}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Open"
+                icon={Icon.ArrowRight}
+                onAction={async () => {
+                  await openDeepLink(bm.link);
+                  await showToast(Toast.Style.Success, `Opened ${bm.name}`);
+                }}
+              />
+              <Action.CopyToClipboard title="Copy Link" content={bm.link} />
+              <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(bm)} />
+              <Action title="Remove" icon={Icon.Trash} style={Action.Style.Destructive} onAction={() => onRemove(bm.id)} />
+            </ActionPanel>
+          }
+        />
+      ))}
+    </List.Section>
+  );
+}
+
+function BookmarkForm(props: { initial?: Bookmark; onSubmit: (bm: Bookmark) => Promise<void> }) {
+  const { initial, onSubmit } = props;
+  const { pop } = useNavigation();
+
+  const [name, setName] = useState(initial?.name ?? "");
+  const [link, setLink] = useState(initial?.link ?? "");
+  const [guildId, setGuildId] = useState("");
+  const [channelId, setChannelId] = useState("");
+  const [messageId, setMessageId] = useState("");
+  const [tags, setTags] = useState<string>((initial?.tags || []).join(", "));
+
+  const handleSubmit = async () => {
+    let final = link.trim();
+    if (!final) {
+      if (guildId.trim() && channelId.trim() && messageId.trim()) {
+        final = require("./utils/discord").makeGuildMessageLink(guildId.trim(), channelId.trim(), messageId.trim());
+      } else if (!guildId.trim() && channelId.trim() && messageId.trim()) {
+        final = require("./utils/discord").makeDmMessageLink(channelId.trim(), messageId.trim());
+      }
+    }
+    if (!isDiscordDeepLink(final)) {
+      await showToast(Toast.Style.Failure, "Invalid Link", "Provide a discord:// link or IDs for guild/channel/message or DM channel/message.");
+      return;
+    }
+    const bm: Bookmark = {
+      id: initial?.id ?? genId(),
+      name: name.trim() || "Untitled",
+      link: final,
+      tags: tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+    };
+    await onSubmit(bm);
+    await showToast(Toast.Style.Success, initial ? "Bookmark Updated" : "Bookmark Added");
+    pop();
+  };
+
+  return (
+    <Form
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title={initial ? "Save Changes" : "Add Bookmark"} onSubmit={handleSubmit} />
+        </ActionPanel>
+      }
+    >
+      <Form.TextField id="name" title="Name" placeholder="e.g., Important message" value={name} onChange={setName} />
+      <Form.Separator />
+      <Form.Description title="Compose by IDs (optional)" text="Guild+Channel+Message for servers, Channel+Message for DMs. Leave Guild empty for DMs." />
+      <Form.TextField id="guildId" title="Guild ID (server)" placeholder="e.g., 123... (leave empty for DM)" value={guildId} onChange={setGuildId} />
+      <Form.TextField id="channelId" title="Channel ID / DM Channel ID" placeholder="e.g., 456..." value={channelId} onChange={setChannelId} />
+      <Form.TextField id="messageId" title="Message ID" placeholder="e.g., 789..." value={messageId} onChange={setMessageId} />
+      <Form.Separator />
+      <Form.TextField id="link" title="Link (optional)" placeholder="discord://-/channels/<g>/<c>/<m> or @me/<c>/<m>" value={link} onChange={setLink} />
+      <Form.TextField id="tags" title="Tags" placeholder="comma, separated, tags" value={tags} onChange={setTags} />
+    </Form>
+  );
+}
 /*
   Discord Utilities (Windows) — unified command
   Sections:
@@ -35,18 +153,20 @@ import {
   makeDmLink,
   isDiscordDeepLink,
 } from "./utils/discord";
-import type { InstallFlavor, PinnedLink, Preferences, PinType } from "./types";
+import type { InstallFlavor, PinnedLink, Preferences, PinType, Bookmark } from "./types";
 // Simple ID generator to avoid extra dependencies
 function genId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 const PINS_KEY = "pinnedLinks";
+const BOOKMARKS_KEY = "discordBookmarks";
 
 export default function Command() {
   const preferences = getPreferenceValues<Preferences>();
 
   const [pins, setPins] = useState<PinnedLink[]>([]);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [paths, setPaths] = useState<{ stable?: string; ptb?: string; canary?: string }>({});
   const [isLoading, setIsLoading] = useState(true);
 
@@ -58,6 +178,12 @@ export default function Command() {
         setPins(raw ? (JSON.parse(raw) as PinnedLink[]) : []);
       } catch {
         setPins([]);
+      }
+      try {
+        const rawBm = await LocalStorage.getItem<string>(BOOKMARKS_KEY);
+        setBookmarks(rawBm ? (JSON.parse(rawBm) as Bookmark[]) : []);
+      } catch {
+        setBookmarks([]);
       }
       try {
         const resolved = await resolveDiscordPaths(preferences);
@@ -82,6 +208,19 @@ export default function Command() {
     await onSavePins(next);
   };
 
+  // Bookmarks persistence
+  const onSaveBookmarks = async (next: Bookmark[]) => {
+    setBookmarks(next);
+    await LocalStorage.setItem(BOOKMARKS_KEY, JSON.stringify(next));
+  };
+
+  const onRemoveBookmark = async (id: string) => {
+    const ok = await confirmAlert({ title: "Remove Bookmark?", message: "This will delete the bookmark." });
+    if (!ok) return;
+    const next = bookmarks.filter((b) => b.id !== id);
+    await onSaveBookmarks(next);
+  };
+
   const openPreferred = async () => {
     await openDiscord(preferences.preferredFlavor, paths[preferences.preferredFlavor]);
   };
@@ -92,6 +231,7 @@ export default function Command() {
 
   return (
     <List isLoading={isLoading} searchBarPlaceholder="Search pins by name or tag">
+      <BookmarksSection bookmarks={bookmarks} onSave={onSaveBookmarks} onRemove={onRemoveBookmark} />
       <PinnedSection pins={pins} onSave={onSavePins} onRemove={onRemovePin} />
       {showProfiles ? <ProfilesSection paths={paths} /> : null}
       <ActionsSection onOpenPreferred={openPreferred} settingsUrl={settingsUrl} keybindsUrl={keybindsUrl} />
@@ -252,6 +392,8 @@ function ProfilesSection(props: { paths: { stable?: string; ptb?: string; canary
 
 function ActionsSection(props: { onOpenPreferred: () => Promise<void>; settingsUrl: string; keybindsUrl: string }) {
   const { onOpenPreferred, settingsUrl, keybindsUrl } = props;
+  const { getSettingsSubLink } = require("./utils/discord");
+
   return (
     <List.Section title="Actions">
       <List.Item
@@ -297,6 +439,35 @@ function ActionsSection(props: { onOpenPreferred: () => Promise<void>; settingsU
           </ActionPanel>
         }
       />
+      {/* Settings subsections */}
+      {[
+        { key: "voice", title: "Settings: Voice & Video" },
+        { key: "notifications", title: "Settings: Notifications" },
+        { key: "appearance", title: "Settings: Appearance" },
+        { key: "accessibility", title: "Settings: Accessibility" },
+        { key: "privacy", title: "Settings: Privacy & Safety" },
+        { key: "advanced", title: "Settings: Advanced / Developer" },
+      ].map((s) => (
+        <List.Item
+          key={s.key}
+          title={s.title}
+          icon={Icon.Gear}
+          actions={
+            <ActionPanel>
+              <Action
+                title={`Open ${s.title}`}
+                icon={Icon.Gear}
+                onAction={async () => {
+                  const url = getSettingsSubLink(s.key as any);
+                  await openDeepLink(url);
+                  await showToast(Toast.Style.Success, `Opened ${s.title}`);
+                }}
+              />
+              <Action.CopyToClipboard title="Copy Link" content={getSettingsSubLink(s.key as any)} />
+            </ActionPanel>
+          }
+        />
+      ))}
     </List.Section>
   );
 }
