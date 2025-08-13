@@ -40,7 +40,8 @@ npm run dev
 - Secondary command: "Add Discord Pin" (`src/discord-add-pin.tsx`).
   - The form accepts Guild ID and Channel/DM Channel ID to build the correct deep link if you don't paste a full URL.
 - Secondary command: "Open Discord by IDs" (`src/discord-open-by-ids.tsx`).
-  - Quickly open a server, channel, DM, or message by IDs without saving a pin.
+  - Single field: "Identifier or Link". Paste any of the supported formats below and it opens immediately.
+  - No saving required.
   - This command allows you to open Discord with specific IDs without having to save a pin.
 
 ## Preferences

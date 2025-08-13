@@ -93,6 +93,7 @@ function BookmarkForm(props: { initial?: Bookmark; onSubmit: (bm: Bookmark) => P
 
   const [name, setName] = useState(initial?.name ?? "");
   const [link, setLink] = useState(initial?.link ?? "");
+  const [identifier, setIdentifier] = useState("");
   const [guildId, setGuildId] = useState("");
   const [channelId, setChannelId] = useState("");
   const [messageId, setMessageId] = useState("");
@@ -100,6 +101,11 @@ function BookmarkForm(props: { initial?: Bookmark; onSubmit: (bm: Bookmark) => P
 
   const handleSubmit = async () => {
     let final = link.trim();
+    // Priority 1: single identifier or link field
+    if (!final && identifier.trim()) {
+      const parsed = parseDiscordInput(identifier.trim());
+      if (parsed) final = parsed;
+    }
     if (!final) {
       if (guildId.trim() && channelId.trim() && messageId.trim()) {
         final = require("./utils/discord").makeGuildMessageLink(guildId.trim(), channelId.trim(), messageId.trim());
@@ -133,6 +139,8 @@ function BookmarkForm(props: { initial?: Bookmark; onSubmit: (bm: Bookmark) => P
         </ActionPanel>
       }
     >
+      <Form.TextField id="identifier" title="Identifier or Link" placeholder="discord link, https link, IDs (e.g. 123/456[/789]), @me/456, dm:456" value={identifier} onChange={setIdentifier} />
+      <Form.Description title="Tip" text="Enter any channel/DM/server identifier; we'll resolve it automatically. Fields below are optional fallbacks." />
       <Form.TextField id="name" title="Name" placeholder="e.g., Important message" value={name} onChange={setName} />
       <Form.Separator />
       <Form.Description title="Compose by IDs (optional)" text="Guild+Channel+Message for servers, Channel+Message for DMs. Leave Guild empty for DMs." />
@@ -163,20 +171,22 @@ import {
   Form,
   Icon,
   List,
+  LocalStorage,
   Toast,
   confirmAlert,
   getPreferenceValues,
   showToast,
   useNavigation,
 } from "@raycast/api";
-import { LocalStorage } from "@raycast/api";
 import { useEffect, useMemo, useState } from "react";
 import {
   getKeybindsLink,
   getSettingsLink,
+  getSettingsSubLink,
   openDeepLink,
   openDiscord,
   resolveDiscordPaths,
+  parseDiscordInput,
   makeServerLink,
   makeChannelLink,
   makeDmLink,
@@ -191,6 +201,7 @@ function genId() {
 const PINS_KEY = "pinnedLinks";
 const BOOKMARKS_KEY = "discordBookmarks";
 const CHOSEN_FLAVOR_KEY = "chosenFlavor";
+const SAVED_GUILDS_KEY = "savedGuildIds"; // stores [{ id, name }]
 
 export default function Command() {
   const preferences = getPreferenceValues<Preferences>();
@@ -334,7 +345,32 @@ function PinnedSection(props: {
     );
 
   const dmPins = pins.filter((p) => p.type === "dm");
-  const otherPins = pins.filter((p) => p.type !== "dm");
+  const serverPins = pins.filter((p) => p.type === "server");
+  const channelPins = pins.filter((p) => p.type === "channel");
+
+  // Helper to extract guild id from a discord deep link
+  const extractGuildId = (link: string): string | undefined => {
+    const m = link.match(/discord:\/\/-\/channels\/(\d+)/i);
+    return m?.[1];
+  };
+  const extractGuildIdFromChannel = (link: string): string | undefined => {
+    const m = link.match(/discord:\/\/-\/channels\/(\d+)\/(\d+)/i);
+    return m?.[1];
+  };
+
+  // Build server map for grouping and display names
+  const serverByGuild: Record<string, { pin: PinnedLink; name: string }> = {};
+  for (const sp of serverPins) {
+    const gid = extractGuildId(sp.link);
+    if (gid) serverByGuild[gid] = { pin: sp, name: sp.name };
+  }
+  const channelsByGuild: Record<string, PinnedLink[]> = {};
+  for (const cp of channelPins) {
+    const gid = extractGuildIdFromChannel(cp.link);
+    if (!gid) continue;
+    if (!channelsByGuild[gid]) channelsByGuild[gid] = [];
+    channelsByGuild[gid].push(cp);
+  }
 
   return (
     <>
@@ -387,41 +423,63 @@ function PinnedSection(props: {
         </List.Section>
       )}
 
-      {otherPins.length > 0 && (
-        <List.Section title="Servers & Channels" subtitle={`${otherPins.length}`}>
-          {otherPins.map((pin) => (
+      {/* Servers and their Channels */}
+      {(serverPins.length > 0 || channelPins.length > 0) && (
+        <List.Section title="Servers">
+          {/* Render each server */}
+          {serverPins.map((sp) => (
             <List.Item
-              key={pin.id}
-              title={pin.name}
-              accessories={(pin.tags || []).map((t) => ({ tag: t }))}
-              keywords={pin.tags}
-              icon={Icon.Link}
+              key={sp.id}
+              title={sp.name}
+              icon={Icon.AppWindow}
+              accessories={(sp.tags || []).map((t) => ({ tag: t }))}
+              keywords={sp.tags}
               actions={
                 <ActionPanel>
                   <Action
-                    title="Open"
+                    title="Open Server"
                     icon={Icon.ArrowRight}
                     onAction={async () => {
-                      if (!pin.link.toLowerCase().startsWith("discord://")) {
-                        await showToast(Toast.Style.Failure, "Invalid Link", "Must start with discord://");
-                        return;
-                      }
-                      await openDeepLink(pin.link);
-                      await showToast(Toast.Style.Success, `Opened ${pin.name}`);
+                      await openDeepLink(sp.link);
+                      await showToast(Toast.Style.Success, `Opened ${sp.name}`);
                     }}
                   />
-                  <Action.CopyToClipboard title="Copy Link" content={pin.link} />
-                  <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(pin)} />
-                  <Action
-                    title="Remove"
-                    icon={Icon.Trash}
-                    style={Action.Style.Destructive}
-                    onAction={() => onRemove(pin.id)}
-                  />
+                  <Action.CopyToClipboard title="Copy Link" content={sp.link} />
+                  <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(sp)} />
+                  <Action title="Remove" icon={Icon.Trash} style={Action.Style.Destructive} onAction={() => onRemove(sp.id)} />
                 </ActionPanel>
               }
             />
           ))}
+
+          {/* Render channels grouped under their server */}
+          {Object.entries(channelsByGuild).map(([gid, cps]) => {
+            const serverName = serverByGuild[gid]?.name || `Server ${gid}`;
+            return cps.map((cp) => (
+              <List.Item
+                key={cp.id}
+                title={cp.name}
+                icon={Icon.Hashtag}
+                accessories={[{ tag: `in ${serverName}` }, ...(cp.tags || []).map((t) => ({ tag: t }))]}
+                keywords={[serverName, ...(cp.tags || [])]}
+                actions={
+                  <ActionPanel>
+                    <Action
+                      title={`Open ${cp.name}`}
+                      icon={Icon.ArrowRight}
+                      onAction={async () => {
+                        await openDeepLink(cp.link);
+                        await showToast(Toast.Style.Success, `Opened ${cp.name}`);
+                      }}
+                    />
+                    <Action.CopyToClipboard title="Copy Link" content={cp.link} />
+                    <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(cp)} />
+                    <Action title="Remove" icon={Icon.Trash} style={Action.Style.Destructive} onAction={() => onRemove(cp.id)} />
+                  </ActionPanel>
+                }
+              />
+            ));
+          })}
         </List.Section>
       )}
     </>
@@ -553,6 +611,58 @@ function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => P
   const [tags, setTags] = useState<string>((initial?.tags || []).join(", "));
   const [guildId, setGuildId] = useState<string>("");
   const [channelId, setChannelId] = useState<string>("");
+  type SavedGuild = { id: string; name: string };
+  const [savedGuilds, setSavedGuilds] = useState<SavedGuild[]>([]);
+  const [guildChoice, setGuildChoice] = useState<string>("custom"); // value is either a guildId from savedGuilds or "custom"
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await LocalStorage.getItem<string>(SAVED_GUILDS_KEY);
+        if (!raw) {
+          setSavedGuilds([]);
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        // Backward compatibility: if it was ["gid", ...], convert to objects
+        if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
+          const converted: SavedGuild[] = parsed.map((id: string) => ({ id, name: id }));
+          setSavedGuilds(converted);
+          await LocalStorage.setItem(SAVED_GUILDS_KEY, JSON.stringify(converted));
+        } else if (Array.isArray(parsed)) {
+          const objs: SavedGuild[] = parsed
+            .map((x) => (x && typeof x.id === "string" ? { id: x.id, name: typeof x.name === "string" && x.name ? x.name : x.id } : null))
+            .filter(Boolean) as SavedGuild[];
+          // Enrich names from existing server pins if name === id
+          try {
+            const pinsRaw = await LocalStorage.getItem<string>(PINS_KEY);
+            const pinsArr = pinsRaw ? (JSON.parse(pinsRaw) as PinnedLink[]) : [];
+            const serverPins = pinsArr.filter((p) => p.type === "server");
+            const extractGuildId = (link: string): string | undefined => {
+              const m = link.match(/discord:\/\/-\/channels\/(\d+)/i);
+              return m?.[1];
+            };
+            const nameByGid = new Map<string, string>();
+            for (const sp of serverPins) {
+              const gid = extractGuildId(sp.link);
+              if (gid) nameByGid.set(gid, sp.name || gid);
+            }
+            const enriched = objs.map((g) => (g.name === g.id && nameByGid.get(g.id) ? { ...g, name: nameByGid.get(g.id)! } : g));
+            setSavedGuilds(enriched);
+            if (JSON.stringify(enriched) !== JSON.stringify(objs)) {
+              await LocalStorage.setItem(SAVED_GUILDS_KEY, JSON.stringify(enriched));
+            }
+          } catch {
+            setSavedGuilds(objs);
+          }
+        } else {
+          setSavedGuilds([]);
+        }
+      } catch {
+        setSavedGuilds([]);
+      }
+    })();
+  }, []);
 
   const handleSubmit = async () => {
     let finalLink = link.trim();
@@ -583,6 +693,16 @@ function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => P
         .filter(Boolean),
     };
     await onSubmit(pin);
+    // Persist server (guild) IDs when the user pins a server
+    if (!initial && type === "server" && guildId.trim()) {
+      const id = guildId.trim();
+      const displayName = pin.name || id;
+      const mapById = new Map<string, SavedGuild>((savedGuilds || []).map((g) => [g.id, g]));
+      mapById.set(id, { id, name: displayName });
+      const next = Array.from(mapById.values());
+      setSavedGuilds(next);
+      await LocalStorage.setItem(SAVED_GUILDS_KEY, JSON.stringify(next));
+    }
     await showToast(Toast.Style.Success, initial ? "Pin Updated" : "Pin Added");
     pop();
   };
@@ -603,7 +723,24 @@ function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => P
       </Form.Dropdown>
       <Form.Separator />
       <Form.Description title="Compose by IDs (optional)" text="Provide IDs to auto-build the link if you don't paste a full discord:// URL." />
-      <Form.TextField id="guildId" title="Guild ID" placeholder="e.g., 123456789012345678" value={guildId} onChange={setGuildId} />
+      {type === "channel" && savedGuilds.length > 0 ? (
+        <>
+          <Form.Dropdown id="guildChoice" title="Guild" value={guildChoice} onChange={(v) => {
+            setGuildChoice(v);
+            if (v !== "custom") setGuildId(v);
+          }}>
+            {savedGuilds.map((g) => (
+              <Form.Dropdown.Item key={g.id} value={g.id} title={g.name} />
+            ))}
+            <Form.Dropdown.Item value="custom" title="Enter Manually" />
+          </Form.Dropdown>
+          {guildChoice === "custom" ? (
+            <Form.TextField id="guildId" title="Guild ID" placeholder="e.g., 123456789012345678" value={guildId} onChange={setGuildId} />
+          ) : null}
+        </>
+      ) : (
+        <Form.TextField id="guildId" title="Guild ID" placeholder="e.g., 123456789012345678" value={guildId} onChange={setGuildId} />
+      )}
       <Form.TextField id="channelId" title="Channel ID / DM Channel ID" placeholder="e.g., 123456789012345678" value={channelId} onChange={setChannelId} />
       <Form.Separator />
       <Form.TextField id="link" title="Link (optional)" placeholder="discord://-/channels/<guild>/<channel>" value={link} onChange={setLink} />

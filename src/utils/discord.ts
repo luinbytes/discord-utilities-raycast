@@ -143,6 +143,96 @@ export function isDiscordDeepLink(url: string): boolean {
   return /^discord:\/\//i.test(url.trim());
 }
 
+/**
+ * Parse a single input string and attempt to build a discord:// deep link.
+ * Supported inputs (examples):
+ * - Full deep link: discord://-/channels/123/456[/789]
+ * - Web URL: https://discord.com/channels/123/456[/789] or .../@me/456[/789]
+ * - Triplet IDs: 123/456/789 or 123 456 789 or 123,456,789 (guild/channel/message)
+ * - Pair IDs: 123/456 (guild/channel)
+ * - DM pair: @me/456[/789] or dm:456[/789]
+ * - Single ID: assume DM channel open (channels/@me/<id>)
+ * - Prefixed hints: server:123, channel:123/456, dm:456[/789]
+ */
+export function parseDiscordInput(input: string): string | undefined {
+  const raw = input.trim();
+  if (!raw) return undefined;
+
+  // Already a deep link
+  if (isDiscordDeepLink(raw)) return raw;
+
+  // Web URL
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const u = new URL(raw);
+      const parts = u.pathname.split("/").filter(Boolean); // e.g., channels, <guild|@me>, <channel>, [message]
+      const chIdx = parts.findIndex((p) => p.toLowerCase() === "channels");
+      if (chIdx >= 0) {
+        const a = parts[chIdx + 1];
+        const b = parts[chIdx + 2];
+        const c = parts[chIdx + 3];
+        if (a && b && c) {
+          // guild or @me / channel / message
+          if (a.toLowerCase() === "@me") return makeDmMessageLink(b, c);
+          return makeGuildMessageLink(a, b, c);
+        } else if (a && b) {
+          if (a.toLowerCase() === "@me") return makeDmLink(b);
+          return makeChannelLink(a, b);
+        }
+      }
+    }
+  } catch {}
+
+  // Prefix hints
+  const lower = raw.toLowerCase();
+  if (lower.startsWith("dm:")) {
+    const rest = raw.slice(3).trim();
+    const [ch, msg] = splitIds(rest);
+    if (ch && msg) return makeDmMessageLink(ch, msg);
+    if (ch) return makeDmLink(ch);
+  }
+  if (lower.startsWith("server:")) {
+    const guild = raw.slice(7).trim();
+    if (guild) return makeServerLink(guild);
+  }
+  if (lower.startsWith("channel:")) {
+    const rest = raw.slice(8).trim();
+    const [g, c, m] = splitIds(rest);
+    if (g && c && m) return makeGuildMessageLink(g, c, m);
+    if (g && c) return makeChannelLink(g, c);
+  }
+
+  // @me path notation
+  if (lower.startsWith("@me/")) {
+    const rest = raw.slice(4);
+    const [ch, msg] = splitIds(rest);
+    if (ch && msg) return makeDmMessageLink(ch, msg);
+    if (ch) return makeDmLink(ch);
+  }
+
+  // Triplet / pair / single IDs separated by / , space, or ,
+  const ids = raw.split(/[\s,/]+/).filter(Boolean);
+  if (ids.length >= 3) {
+    const [g, c, m] = ids;
+    return makeGuildMessageLink(g, c, m);
+  }
+  if (ids.length === 2) {
+    const [a, b] = ids;
+    // Without @me hint we assume guild/channel
+    return makeChannelLink(a, b);
+  }
+  if (ids.length === 1) {
+    // Assume DM channel id
+    return makeDmLink(ids[0]);
+  }
+
+  return undefined;
+}
+
+function splitIds(s: string): string[] {
+  return s.split(/[\s,/]+/).filter(Boolean);
+}
+
 export function makeGuildMessageLink(guildId: string, channelId: string, messageId: string): string {
   return `discord://-/channels/${guildId}/${channelId}/${messageId}`;
 }
