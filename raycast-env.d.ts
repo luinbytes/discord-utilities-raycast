@@ -24,18 +24,10 @@ declare type Preferences = ExtensionPreferences
 declare namespace Preferences {
   /** Preferences accessible in the `discord` command */
   export type Discord = ExtensionPreferences & {}
-  /** Preferences accessible in the `discord-add-pin` command */
-  export type DiscordAddPin = ExtensionPreferences & {}
-  /** Preferences accessible in the `discord-open-by-ids` command */
-  export type DiscordOpenByIds = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
   /** Arguments passed to the `discord` command */
   export type Discord = {}
-  /** Arguments passed to the `discord-add-pin` command */
-  export type DiscordAddPin = {}
-  /** Arguments passed to the `discord-open-by-ids` command */
-  export type DiscordOpenByIds = {}
 }
 

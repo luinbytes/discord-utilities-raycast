@@ -33,12 +33,21 @@ npm run dev
 - Command: "Discord Utilities" (`src/discord.tsx`).
   - Sections: Bookmarks, Pinned Links, Profiles (hidden after choosing flavor), Actions.
   - Profiles section is hidden once a Preferred Flavor is set in Preferences.
+  - Pinned layout:
+    - DMs are shown in their own section.
+    - A Servers section shows each Server pin and all Channel pins grouped under their server (channels display an accessory tag with the server name).
+    - Server items use a more fitting people icon.
   - Pinned item actions: Open, Copy Link, Edit, Remove.
   - Bookmarks: Open, Copy Link, Edit, Remove.
   - Profiles: Open Stable/PTB/Canary, Copy Path.
   - Global actions: Open Discord (preferred), Open Settings, Open Keybinds, plus Settings subsections.
 - Secondary command: "Add Discord Pin" (`src/discord-add-pin.tsx`).
-  - The form accepts Guild ID and Channel/DM Channel ID to build the correct deep link if you don't paste a full URL.
+  - The form accepts IDs to build the correct deep link if you don't paste a full URL.
+  - Saved Guilds: when you save a Server pin, its `{ id, name }` is stored locally and offered as a dropdown when adding Channel pins, so you don't need to retype the Guild ID.
+  - Field visibility by type:
+    - Server: shows Guild ID only.
+    - Channel: shows Guild (dropdown or manual) and Channel ID.
+    - DM: shows DM Channel ID only (no Guild controls).
 - Secondary command: "Open Discord by IDs" (`src/discord-open-by-ids.tsx`).
   - Single field: "Identifier or Link". Paste any of the supported formats below and it opens immediately.
   - No saving required.

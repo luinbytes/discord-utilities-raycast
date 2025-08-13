@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "discord-utilities",
-  "title": "Discord Utilities",
+  "title": "Control your discord client with ease.",
   "description": "Control your discord client with ease.",
   "icon": "command-icon.png",
   "author": "nazzy_wazzy_lu",
@@ -26,22 +26,6 @@
       "description": "Control your Discord client with ease.",
       "mode": "view",
       "path": "src/discord.tsx",
-      "icon": "command-icon.png"
-    },
-    {
-      "name": "discord-add-pin",
-      "title": "Add Discord Pin",
-      "description": "Create a new pinned Discord deep link.",
-      "mode": "view",
-      "path": "src/discord-add-pin.tsx",
-      "icon": "command-icon.png"
-    },
-    {
-      "name": "discord-open-by-ids",
-      "title": "Open Discord by IDs",
-      "description": "Open a server, channel, DM, or message by IDs without saving.",
-      "mode": "view",
-      "path": "src/discord-open-by-ids.tsx",
       "icon": "command-icon.png"
     }
   ],

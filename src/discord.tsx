@@ -372,6 +372,23 @@ function PinnedSection(props: {
     channelsByGuild[gid].push(cp);
   }
 
+  // Deterministic color by tag value
+  const colorForTag = (tag: string): string => {
+    const palette = [
+      "#3B82F6", // blue
+      "#10B981", // green
+      "#F59E0B", // yellow/orange
+      "#EF4444", // red
+      "#8B5CF6", // purple
+      "#EC4899", // pink
+      "#14B8A6", // teal
+      "#A16207", // brownish
+    ];
+    let hash = 0;
+    for (let i = 0; i < tag.length; i++) hash = (hash * 31 + tag.charCodeAt(i)) >>> 0;
+    return palette[hash % palette.length];
+  };
+
   return (
     <>
       <List.Item
@@ -423,64 +440,119 @@ function PinnedSection(props: {
         </List.Section>
       )}
 
-      {/* Servers and their Channels */}
+      {/* Servers and their Channels (grouped per server) */}
       {(serverPins.length > 0 || channelPins.length > 0) && (
-        <List.Section title="Servers">
-          {/* Render each server */}
-          {serverPins.map((sp) => (
-            <List.Item
-              key={sp.id}
-              title={sp.name}
-              icon={Icon.AppWindow}
-              accessories={(sp.tags || []).map((t) => ({ tag: t }))}
-              keywords={sp.tags}
-              actions={
-                <ActionPanel>
-                  <Action
-                    title="Open Server"
-                    icon={Icon.ArrowRight}
-                    onAction={async () => {
-                      await openDeepLink(sp.link);
-                      await showToast(Toast.Style.Success, `Opened ${sp.name}`);
-                    }}
+        <>
+          {serverPins.map((sp) => {
+            // compute list of channels for this server
+            const gid = extractGuildId(sp.link);
+            const cps = (gid && channelsByGuild[gid]) ? channelsByGuild[gid] : [];
+            return (
+              <List.Section key={`srv-${sp.id}`} title={sp.name}>
+                <List.Item
+                  key={sp.id}
+                  title={sp.name}
+                  icon={Icon.TwoPeople}
+                  accessories={(sp.tags || []).map((t) => ({ tag: { value: t, color: colorForTag(t) } }))}
+                  keywords={sp.tags}
+                  actions={
+                    <ActionPanel>
+                      <Action
+                        title="Open Server"
+                        icon={Icon.ArrowRight}
+                        onAction={async () => {
+                          await openDeepLink(sp.link);
+                          await showToast(Toast.Style.Success, `Opened ${sp.name}`);
+                        }}
+                      />
+                      <Action
+                        title="Add Channel to This Server"
+                        icon={Icon.Hashtag}
+                        onAction={() => {
+                          const gid = extractGuildId(sp.link);
+                          if (!gid) return;
+                          push(
+                            <PinForm
+                              defaultType="channel"
+                              defaultGuildId={gid}
+                              defaultGuildName={sp.name}
+                              onSubmit={async (pin) => onSave([...(pins || []), pin])}
+                            />
+                          );
+                        }}
+                      />
+                      <Action.CopyToClipboard title="Copy Link" content={sp.link} />
+                      <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(sp)} />
+                      <Action title="Remove" icon={Icon.Trash} style={Action.Style.Destructive} onAction={() => onRemove(sp.id)} />
+                    </ActionPanel>
+                  }
+                />
+                {cps.map((cp) => (
+                  <List.Item
+                    key={cp.id}
+                    title={cp.name}
+                    icon={Icon.Hashtag}
+                    accessories={[
+                      { tag: { value: sp.name } },
+                      ...(cp.tags || []).map((t) => ({ tag: { value: t, color: colorForTag(t) } })),
+                    ]}
+                    keywords={[sp.name, ...(cp.tags || [])]}
+                    actions={
+                      <ActionPanel>
+                        <Action
+                          title={`Open ${cp.name}`}
+                          icon={Icon.ArrowRight}
+                          onAction={async () => {
+                            await openDeepLink(cp.link);
+                            await showToast(Toast.Style.Success, `Opened ${cp.name}`);
+                          }}
+                        />
+                        <Action.CopyToClipboard title="Copy Link" content={cp.link} />
+                        <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(cp)} />
+                        <Action title="Remove" icon={Icon.Trash} style={Action.Style.Destructive} onAction={() => onRemove(cp.id)} />
+                      </ActionPanel>
+                    }
                   />
-                  <Action.CopyToClipboard title="Copy Link" content={sp.link} />
-                  <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(sp)} />
-                  <Action title="Remove" icon={Icon.Trash} style={Action.Style.Destructive} onAction={() => onRemove(sp.id)} />
-                </ActionPanel>
-              }
-            />
-          ))}
-
-          {/* Render channels grouped under their server */}
-          {Object.entries(channelsByGuild).map(([gid, cps]) => {
-            const serverName = serverByGuild[gid]?.name || `Server ${gid}`;
-            return cps.map((cp) => (
-              <List.Item
-                key={cp.id}
-                title={cp.name}
-                icon={Icon.Hashtag}
-                accessories={[{ tag: `in ${serverName}` }, ...(cp.tags || []).map((t) => ({ tag: t }))]}
-                keywords={[serverName, ...(cp.tags || [])]}
-                actions={
-                  <ActionPanel>
-                    <Action
-                      title={`Open ${cp.name}`}
-                      icon={Icon.ArrowRight}
-                      onAction={async () => {
-                        await openDeepLink(cp.link);
-                        await showToast(Toast.Style.Success, `Opened ${cp.name}`);
-                      }}
-                    />
-                    <Action.CopyToClipboard title="Copy Link" content={cp.link} />
-                    <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(cp)} />
-                    <Action title="Remove" icon={Icon.Trash} style={Action.Style.Destructive} onAction={() => onRemove(cp.id)} />
-                  </ActionPanel>
-                }
-              />
-            ));
+                ))}
+              </List.Section>
+            );
           })}
-        </List.Section>
+
+          {/* Channels without a matching server pin */}
+          {Object.entries(channelsByGuild)
+            .filter(([gid]) => !serverByGuild[gid])
+            .map(([gid, cps]) => (
+              <List.Section key={`orphan-${gid}`} title={`Server ${gid}`}>
+                {cps.map((cp) => (
+                  <List.Item
+                    key={cp.id}
+                    title={cp.name}
+                    icon={Icon.Hashtag}
+                    accessories={[
+                      { tag: { value: gid } },
+                      ...(cp.tags || []).map((t) => ({ tag: { value: t, color: colorForTag(t) } })),
+                    ]}
+                    keywords={[gid, ...(cp.tags || [])]}
+                    actions={
+                      <ActionPanel>
+                        <Action
+                          title={`Open ${cp.name}`}
+                          icon={Icon.ArrowRight}
+                          onAction={async () => {
+                            await openDeepLink(cp.link);
+                            await showToast(Toast.Style.Success, `Opened ${cp.name}`);
+                          }}
+                        />
+                        <Action.CopyToClipboard title="Copy Link" content={cp.link} />
+                        <Action title="Edit" icon={Icon.Pencil} onAction={() => onEdit(cp)} />
+                        <Action title="Remove" icon={Icon.Trash} style={Action.Style.Destructive} onAction={() => onRemove(cp.id)} />
+                      </ActionPanel>
+                    }
+                  />
+                ))}
+              </List.Section>
+            ))}
+        </>
       )}
     </>
   );
@@ -601,19 +673,25 @@ function ActionsSection(props: { onOpenPreferred: () => Promise<void>; settingsU
   );
 }
 
-function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => Promise<void> }) {
+function PinForm(props: {
+  initial?: PinnedLink;
+  onSubmit: (pin: PinnedLink) => Promise<void>;
+  defaultType?: PinType;
+  defaultGuildId?: string;
+  defaultGuildName?: string;
+}) {
   const { initial, onSubmit } = props;
   const { pop } = useNavigation();
 
   const [name, setName] = useState(initial?.name ?? "");
-  const [type, setType] = useState<PinType>(initial?.type ?? "channel");
+  const [type, setType] = useState<PinType>(initial?.type || props.defaultType || "server");
   const [link, setLink] = useState(initial?.link ?? "");
   const [tags, setTags] = useState<string>((initial?.tags || []).join(", "));
-  const [guildId, setGuildId] = useState<string>("");
+  const [guildId, setGuildId] = useState<string>(props.defaultGuildId || "");
   const [channelId, setChannelId] = useState<string>("");
   type SavedGuild = { id: string; name: string };
   const [savedGuilds, setSavedGuilds] = useState<SavedGuild[]>([]);
-  const [guildChoice, setGuildChoice] = useState<string>("custom"); // value is either a guildId from savedGuilds or "custom"
+  const [guildChoice, setGuildChoice] = useState<string>(props.defaultGuildId ? props.defaultGuildId : "custom"); // value is either a guildId from savedGuilds or "custom"
 
   useEffect(() => {
     (async () => {
@@ -663,6 +741,14 @@ function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => P
       }
     })();
   }, []);
+
+  // If a default guild was provided, prefer selecting it in the dropdown when type is channel
+  useEffect(() => {
+    if (props.defaultGuildId && type === "channel") {
+      setGuildChoice(props.defaultGuildId);
+      setGuildId(props.defaultGuildId);
+    }
+  }, [props.defaultGuildId, type]);
 
   const handleSubmit = async () => {
     let finalLink = link.trim();
@@ -722,7 +808,16 @@ function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => P
         <Form.Dropdown.Item value="dm" title="Direct Message" />
       </Form.Dropdown>
       <Form.Separator />
-      <Form.Description title="Compose by IDs (optional)" text="Provide IDs to auto-build the link if you don't paste a full discord:// URL." />
+      <Form.Description
+        title="Compose by IDs (optional)"
+        text={
+          type === "server"
+            ? "Enter the Guild ID to build a server link if no full discord:// URL is provided."
+            : type === "channel"
+            ? "Pick a saved Guild (or enter manually) and provide the Channel ID to build the link."
+            : "Provide the DM Channel ID to build the link."
+        }
+      />
       {type === "channel" && savedGuilds.length > 0 ? (
         <>
           <Form.Dropdown id="guildChoice" title="Guild" value={guildChoice} onChange={(v) => {
@@ -738,10 +833,17 @@ function PinForm(props: { initial?: PinnedLink; onSubmit: (pin: PinnedLink) => P
             <Form.TextField id="guildId" title="Guild ID" placeholder="e.g., 123456789012345678" value={guildId} onChange={setGuildId} />
           ) : null}
         </>
-      ) : (
+      ) : type === "channel" ? (
         <Form.TextField id="guildId" title="Guild ID" placeholder="e.g., 123456789012345678" value={guildId} onChange={setGuildId} />
+      ) : type === "server" ? (
+        <Form.TextField id="guildId" title="Guild ID" placeholder="e.g., 123456789012345678" value={guildId} onChange={setGuildId} />
+      ) : null}
+      {type === "channel" && (
+        <Form.TextField id="channelId" title="Channel ID" placeholder="e.g., 123456789012345678" value={channelId} onChange={setChannelId} />
       )}
-      <Form.TextField id="channelId" title="Channel ID / DM Channel ID" placeholder="e.g., 123456789012345678" value={channelId} onChange={setChannelId} />
+      {type === "dm" && (
+        <Form.TextField id="channelId" title="DM Channel ID" placeholder="e.g., 123456789012345678" value={channelId} onChange={setChannelId} />
+      )}
       <Form.Separator />
       <Form.TextField id="link" title="Link (optional)" placeholder="discord://-/channels/<guild>/<channel>" value={link} onChange={setLink} />
       <Form.TextField id="tags" title="Tags" placeholder="comma, separated, tags" value={tags} onChange={setTags} />
