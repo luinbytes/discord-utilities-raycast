@@ -165,6 +165,30 @@ export default function DmsCommand() {
     setDmNicknames(await getDmNicknames());
   };
 
+  const movePinnedDMUp = async (dmId: string) => {
+    const currentIndex = pinnedDMs.indexOf(dmId);
+    if (currentIndex > 0) {
+      const newPinnedDMs = [...pinnedDMs];
+      const [movedDm] = newPinnedDMs.splice(currentIndex, 1);
+      newPinnedDMs.splice(currentIndex - 1, 0, movedDm);
+      setPinnedDMs(newPinnedDMs);
+      // Save the entire newPinnedDMs array to LocalStorage
+      await LocalStorage.setItem("pinnedDMs", JSON.stringify(newPinnedDMs));
+    }
+  };
+
+  const movePinnedDMDown = async (dmId: string) => {
+    const currentIndex = pinnedDMs.indexOf(dmId);
+    if (currentIndex < pinnedDMs.length - 1) {
+      const newPinnedDMs = [...pinnedDMs];
+      const [movedDm] = newPinnedDMs.splice(currentIndex, 1);
+      newPinnedDMs.splice(currentIndex + 1, 0, movedDm);
+      setPinnedDMs(newPinnedDMs);
+      // Save the entire newPinnedDMs array to LocalStorage
+      await LocalStorage.setItem("pinnedDMs", JSON.stringify(newPinnedDMs));
+    }
+  };
+
   const renderListItem = (dm: DMChannel) => {
     const isPinned = pinnedDMs.includes(dm.id);
     const displayName = dmNicknames[dm.id] || dm.recipient?.displayName || "Unknown User";
@@ -202,8 +226,24 @@ export default function DmsCommand() {
               icon={isPinned ? Icon.MinusCircle : Icon.Pin}
               title={isPinned ? "Unpin DM" : "Pin DM"}
               onAction={() => togglePin(dm.id)}
-              shortcut={{ modifiers: ["cmd"], key: "enter" }}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "u" }}
             />
+            {isPinned && (
+              <Action
+                icon={Icon.ArrowUp}
+                title="Move Pinned DM Up"
+                onAction={() => movePinnedDMUp(dm.id)}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "arrowUp" }}
+              />
+            )}
+            {isPinned && (
+              <Action
+                icon={Icon.ArrowDown}
+                title="Move Pinned DM Down"
+                onAction={() => movePinnedDMDown(dm.id)}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "arrowDown" }}
+              />
+            )}
             <Action.Push
               icon={Icon.Pencil}
               title="Set Nickname"
@@ -306,6 +346,39 @@ function SetNicknameForm({ dm, onNicknameSet }: { dm: DMChannel; onNicknameSet: 
         placeholder="Enter nickname for this DM"
         value={nickname}
         onChange={setNickname}
+      />
+    </Form>
+  );
+}
+
+function SendMessageForm({ dm }: { dm: DMChannel }) {
+  const { pop } = useNavigation();
+  const [message, setMessage] = useState<string>("");
+
+  const handleSubmit = async (values: { message: string }) => {
+    try {
+      await dm.send(values.message);
+      pop(); // Go back to the previous view after sending
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      // Optionally, show an error toast or message to the user
+    }
+  };
+
+  return (
+    <Form
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title="Send Message" onSubmit={handleSubmit} />
+        </ActionPanel>
+      }
+    >
+      <Form.TextField
+        id="message"
+        title="Message"
+        placeholder="Type your message here"
+        value={message}
+        onChange={setMessage}
       />
     </Form>
   );
