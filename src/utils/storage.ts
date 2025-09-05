@@ -1,5 +1,6 @@
 import { LocalStorage } from "@raycast/api";
 import { Message } from "discord.js-selfbot-v13";
+import { Guild, User } from "discord.js-selfbot-v13";
 
 const PINNED_SERVERS_KEY = "pinnedServers";
 const PINNED_DMS_KEY = "pinnedDMs";
@@ -22,6 +23,18 @@ interface CachedMessage {
   attachments?: { id: string; name: string; url: string }[];
 }
 
+interface CachedGuild {
+  id: string;
+  name: string;
+  iconURL: string | null;
+}
+
+interface CachedUserProfile {
+  id: string;
+  username: string;
+  displayAvatarURL: string | null;
+}
+
 export async function getPinnedServers(): Promise<string[]> {
   const pinnedServers = await LocalStorage.getItem<string>(PINNED_SERVERS_KEY);
   return pinnedServers ? JSON.parse(pinnedServers) : [];
@@ -39,6 +52,10 @@ export async function removePinnedServer(serverId: string): Promise<void> {
   let pinnedServers = await getPinnedServers();
   pinnedServers = pinnedServers.filter((id) => id !== serverId);
   await LocalStorage.setItem(PINNED_SERVERS_KEY, JSON.stringify(pinnedServers));
+}
+
+export async function savePinnedServersOrder(orderedServerIds: string[]): Promise<void> {
+  await LocalStorage.setItem(PINNED_SERVERS_KEY, JSON.stringify(orderedServerIds));
 }
 
 export async function getPinnedDMs(): Promise<string[]> {
@@ -99,7 +116,7 @@ export async function getLastMessages(): Promise<Record<string, CachedMessage>> 
   return cachedMessages ? JSON.parse(cachedMessages) : {};
 }
 
-export async function saveMessages(dmId: string, messages: Message[]): Promise<void> {
+export async function saveMessages(dmId: string, messages: Message[]): Promise<boolean> {
   const serializableMessages: CachedMessage[] = messages.map(message => ({
     id: message.id,
     channelId: message.channelId,
@@ -119,7 +136,18 @@ export async function saveMessages(dmId: string, messages: Message[]): Promise<v
       url: attachment.url,
     })),
   }));
-  await LocalStorage.setItem(`messages_${dmId}`, JSON.stringify(serializableMessages));
+
+  const existingCached = await LocalStorage.getItem<string>(`messages_${dmId}`);
+  const existingSerializableMessages: CachedMessage[] = existingCached ? JSON.parse(existingCached) : [];
+
+  if (JSON.stringify(serializableMessages) !== JSON.stringify(existingSerializableMessages)) {
+    await LocalStorage.setItem(`messages_${dmId}`, JSON.stringify(serializableMessages));
+    console.log(`Storage: Messages for DM ${dmId} cache updated.`);
+    return true; // Indicate that cache was updated
+  } else {
+    console.log(`Storage: Messages for DM ${dmId} cache is up-to-date, no write needed.`);
+    return false; // Indicate that cache was not updated
+  }
 }
 
 export async function getMessages(dmId: string): Promise<Message[]> {
@@ -136,4 +164,56 @@ export async function getMessages(dmId: string): Promise<Message[]> {
     embeds: cachedMsg.embeds || [],
     attachments: new Map(cachedMsg.attachments?.map(att => [att.id, att as any])), // Convert back to Map for attachments
   }) as Message); // Cast to Message as we only need specific properties for display
+}
+
+export async function saveGuilds(guilds: Guild[]): Promise<boolean> {
+  const serializableGuilds: CachedGuild[] = guilds.map(guild => ({
+    id: guild.id,
+    name: guild.name,
+    iconURL: guild.iconURL(),
+  }));
+
+  const existingCached = await LocalStorage.getItem<string>("cachedGuilds");
+  const existingSerializableGuilds: CachedGuild[] = existingCached ? JSON.parse(existingCached) : [];
+
+  // Simple comparison: check if lengths are different or if content is different
+  // A more robust comparison would involve deep equality check or checking specific properties
+  if (JSON.stringify(serializableGuilds) !== JSON.stringify(existingSerializableGuilds)) {
+    await LocalStorage.setItem("cachedGuilds", JSON.stringify(serializableGuilds));
+    console.log("Storage: Guilds cache updated.");
+    return true; // Indicate that cache was updated
+  } else {
+    console.log("Storage: Guilds cache is up-to-date, no write needed.");
+    return false; // Indicate that cache was not updated
+  }
+}
+
+export async function getGuilds(): Promise<CachedGuild[]> {
+  const cached = await LocalStorage.getItem<string>("cachedGuilds");
+  return cached ? JSON.parse(cached) : [];
+}
+
+export async function saveUserProfile(user: User): Promise<boolean> {
+  const serializableUser: CachedUserProfile = {
+    id: user.id,
+    username: user.username,
+    displayAvatarURL: user.displayAvatarURL(),
+  };
+
+  const existingCached = await LocalStorage.getItem<string>("cachedUserProfile");
+  const existingSerializableUser: CachedUserProfile | null = existingCached ? JSON.parse(existingCached) : null;
+
+  if (JSON.stringify(serializableUser) !== JSON.stringify(existingSerializableUser)) {
+    await LocalStorage.setItem("cachedUserProfile", JSON.stringify(serializableUser));
+    console.log("Storage: User profile cache updated.");
+    return true; // Indicate that cache was updated
+  } else {
+    console.log("Storage: User profile cache is up-to-date, no write needed.");
+    return false; // Indicate that cache was not updated
+  }
+}
+
+export async function getUserProfile(): Promise<CachedUserProfile | null> {
+  const cached = await LocalStorage.getItem<string>("cachedUserProfile");
+  return cached ? JSON.parse(cached) : null;
 }

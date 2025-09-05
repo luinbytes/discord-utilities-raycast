@@ -42,6 +42,13 @@
         "description": "View your Discord profile.",
         "mode": "view",
         "path": "src/profile.tsx"
+    },
+    {
+      "name": "refresh",
+      "title": "Force Refresh Data",
+      "description": "Refreshes all Discord data and populates the cache to improve loading times for other commands.",
+      "mode": "view",
+      "path": "src/refresh.tsx"
     }
   ],
   "preferences": [

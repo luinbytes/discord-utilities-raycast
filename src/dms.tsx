@@ -13,7 +13,6 @@ export default function DmsCommand() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
   const [filter, setFilter] = useState("all");
-  const dataLoadedRef = useRef(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -74,21 +73,15 @@ export default function DmsCommand() {
   };
 
   useEffect(() => {
-    if (!dataLoadedRef.current) { // Only load data if not already loaded
-      if (client.isReady()) {
-        loadData();
-        dataLoadedRef.current = true; // Mark as loaded after initial call
-      } else {
-        client.on("ready", () => {
-          loadData();
-          dataLoadedRef.current = true; // Mark as loaded after initial call
-        });
-      }
+    if (client.isReady()) {
+      loadData();
+    } else {
+      client.on("ready", loadData);
     }
     return () => {
       client.off("ready", loadData);
     };
-  }, []);
+  }, [client.isReady()]);
 
   useEffect(() => {
     const handleMessageCreate = async (message: Message) => {
@@ -183,6 +176,11 @@ export default function DmsCommand() {
     setDmNicknames(await getDmNicknames());
   };
 
+  const handleMessageSent = (dmId: string, message: Message) => {
+    setLastMessages((prev) => ({ ...prev, [dmId]: message }));
+    saveLastMessages({ ...lastMessages, [dmId]: message }); // Persist to LocalStorage
+  };
+
   const movePinnedDMUp = async (dmId: string) => {
     const currentIndex = pinnedDMs.indexOf(dmId);
     if (currentIndex > 0) {
@@ -238,7 +236,7 @@ export default function DmsCommand() {
             <Action.Push
               title="Quick Message"
               icon={Icon.Message}
-              target={<SendMessageForm dm={dm} />}
+              target={<SendMessageForm dm={dm} onMessageSent={handleMessageSent} />}
             />
             <Action
               icon={isPinned ? Icon.MinusCircle : Icon.Pin}
@@ -369,13 +367,14 @@ function SetNicknameForm({ dm, onNicknameSet }: { dm: DMChannel; onNicknameSet: 
   );
 }
 
-function SendMessageForm({ dm }: { dm: DMChannel }) {
+function SendMessageForm({ dm, onMessageSent }: { dm: DMChannel; onMessageSent: (dmId: string, message: Message) => void }) {
   const { pop } = useNavigation();
   const [message, setMessage] = useState<string>("");
 
   const handleSubmit = async (values: { message: string }) => {
     try {
-      await dm.send(values.message);
+      const sentMessage = await dm.send(values.message);
+      onMessageSent(dm.id, sentMessage);
       pop(); // Go back to the previous view after sending
     } catch (error) {
       console.error("Failed to send message:", error);

@@ -36,7 +36,7 @@ function formatMessageDetailMarkdown(message: Message): string {
 
 export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | DMChannel | ThreadChannel, dmNicknames: Record<string, string> }) {
   const [items, setItems] = useState<Array<Message | ThreadChannel>>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loadingState, setLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading'); // Simplified states
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const fetchedItemIds = useRef(new Set<string>());
@@ -48,19 +48,20 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
     hasMoreRef.current = hasMore;
   }, [hasMore]);
 
+  const currentChannelIdRef = useRef<string | null>(null); // To track the channel ID for which fetch was initiated
+
   const fetchItems = useCallback(async (loadMore = false) => {
     if (loadMore && !hasMoreRef.current) {
-      setIsLoading(false);
+      setLoadingState('loaded'); // If no more to load, consider it loaded
       return;
     }
-    setIsLoading(true);
-    setError(null); // Clear previous errors
 
-    // Add client ready check
+    setError(null);
+
     if (!client.isReady()) {
       console.log("MessageList: Discord client is not ready. Cannot fetch messages.");
       setError("Discord client is not connected. Please try again later.");
-      setIsLoading(false);
+      setLoadingState('error');
       return;
     }
 
@@ -68,17 +69,20 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
     let newFetchedItems: Array<Message | ThreadChannel> = [];
 
     try {
-      // Try to load from cache first
-      if (!loadMore) { // Only load from cache on initial fetch
+      let loadedFromCache = false;
+      if (!loadMore) {
         const cachedMsgs = await getMessages(channel.id);
         if (cachedMsgs.length > 0) {
           setItems(cachedMsgs);
-          setIsLoading(true); // Keep loading true while fetching fresh
+          setLoadingState('loaded'); // Display cached data immediately
           console.log(`MessageList: Loaded ${cachedMsgs.length} messages from cache.`);
+          loadedFromCache = true;
         }
       }
 
-      // Fetch fresh messages from Discord
+      // Always set to loading when starting network fetch, even if cached data is displayed
+      setLoadingState('loading');
+
       if (channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") {
         console.log(`MessageList: Fetching messages for channel ${channel.id} (before: ${before || 'none'})`); // Log fetch attempt
         const messages = await channel.messages.fetch({ limit: MESSAGES_PER_PAGE, before });
@@ -89,8 +93,7 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
           lastItemId.current = messages.lastKey();
         }
 
-        // Save fresh messages to cache
-        if (!loadMore) { // Only save initial fetch to cache
+        if (!loadMore) {
           await saveMessages(channel.id, newFetchedItems);
           console.log(`MessageList: Saved ${newFetchedItems.length} messages to cache.`);
         }
@@ -107,21 +110,27 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
       uniqueNewItems.forEach(item => fetchedItemIds.current.add(item.id));
 
       setItems(prev => loadMore ? [...prev, ...uniqueNewItems] : uniqueNewItems);
+      setLoadingState('loaded'); // All done, set to loaded
     } catch (err: any) {
       console.error("MessageList: Failed to fetch messages:", err);
       setError(`Failed to load messages: ${err.message || "Unknown error"}`);
-      setHasMore(false); // Stop trying to load more if there's an error
-    } finally {
-      setIsLoading(false);
+      setLoadingState('error');
+      setHasMore(false);
     }
   }, [channel]);
 
   useEffect(() => {
-    console.log(`MessageList: Channel changed. ID: ${channel.id}`);
-    lastItemId.current = undefined;
-    fetchedItemIds.current.clear();
-    setItems([]);
-    fetchItems(false);
+    // Only initiate fetch if channel.id has truly changed
+    if (currentChannelIdRef.current !== channel.id) {
+      console.log(`MessageList: Initiating fetch for channel ID: ${channel.id}`);
+      currentChannelIdRef.current = channel.id; // Mark this channel as being fetched
+
+      lastItemId.current = undefined;
+      fetchedItemIds.current.clear();
+      fetchItems(false);
+    } else {
+      console.log(`MessageList: Channel ID ${channel.id} already initiated fetch. Skipping.`);
+    }
   }, [channel, fetchItems]);
 
   useEffect(() => {
@@ -203,7 +212,7 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
 
   return (
     <List
-      isLoading={isLoading}
+      isLoading={loadingState === 'loading' && items.length === 0} // Only show full loading if no items yet
       navigationTitle={channel.type === "DM" ? channel.recipient?.displayName || channel.name : `#${channel.name}`}
       actions={
         <ActionPanel>
@@ -216,15 +225,21 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
           {hasMore && (
             <Action title="Load More Old Messages" onAction={handleLoadMore} icon={Icon.ArrowUp} />
           )}
+          <Action title="Refresh Messages" onAction={refresh} icon={Icon.ArrowClockwise} />
         </ActionPanel>
       }
     >
       {error ? (
         <List.Item title="Error" subtitle={error} icon={Icon.Warning} />
-      ) : items.length === 0 && !isLoading ? (
-        <List.Item title="No messages found." />
+      ) : items.length === 0 && loadingState === 'loading' ? (
+        <List.Item title="Loading messages..." /> // Show loading indicator if no items and loading
+      ) : items.length === 0 && loadingState === 'loaded' ? (
+        <List.Item title="No messages found." /> // Show no messages if loaded but empty
       ) : (
         items.map(renderItem)
+      )}
+      {loadingState === 'loading' && items.length > 0 && (
+        <List.Item title="Refreshing messages..." icon={Icon.ArrowClockwise} accessories={[{ text: "Loading..." }]} />
       )}
     </List>
   );
