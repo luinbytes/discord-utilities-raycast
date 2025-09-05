@@ -1,4 +1,5 @@
 import { Action, ActionPanel, Form, List, useNavigation, Icon } from "@raycast/api";
+import MessageDetailView from "./MessageDetailView";
 import { DMChannel, GuildChannel, Message, ThreadChannel, ForumChannel, Embed } from "discord.js-selfbot-v13";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { client } from "../utils/discord";
@@ -35,6 +36,7 @@ function formatMessageDetailMarkdown(message: Message): string {
 export default function MessageList({ channel }: { channel: GuildChannel | DMChannel | ThreadChannel }) {
   const [items, setItems] = useState<Array<Message | ThreadChannel>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const fetchedItemIds = useRef(new Set<string>());
   const lastItemId = useRef<string | undefined>();
@@ -51,31 +53,39 @@ export default function MessageList({ channel }: { channel: GuildChannel | DMCha
       return;
     }
     setIsLoading(true);
+    setError(null); // Clear previous errors
 
     const before = loadMore ? lastItemId.current : undefined;
     let newFetchedItems: Array<Message | ThreadChannel> = [];
 
-    if (channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") {
-      const messages = await channel.messages.fetch({ limit: MESSAGES_PER_PAGE, before });
-      newFetchedItems = Array.from(messages.values());
-      setHasMore(messages.size === MESSAGES_PER_PAGE);
-      if (messages.size > 0) {
-        lastItemId.current = messages.lastKey();
+    try {
+      if (channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") {
+        const messages = await channel.messages.fetch({ limit: MESSAGES_PER_PAGE, before });
+        newFetchedItems = Array.from(messages.values());
+        setHasMore(messages.size === MESSAGES_PER_PAGE);
+        if (messages.size > 0) {
+          lastItemId.current = messages.lastKey();
+        }
+      } else if (channel.type === "GUILD_FORUM") {
+        if (!loadMore) {
+          const forumChannel = channel as ForumChannel;
+          const threads = await forumChannel.threads.fetchActive(true);
+          newFetchedItems = Array.from(threads.threads.values());
+        }
+        setHasMore(false);
       }
-    } else if (channel.type === "GUILD_FORUM") {
-      if (!loadMore) {
-        const forumChannel = channel as ForumChannel;
-        const threads = await forumChannel.threads.fetchActive(true);
-        newFetchedItems = Array.from(threads.threads.values());
-      }
-      setHasMore(false);
+
+      const uniqueNewItems = newFetchedItems.filter(item => !fetchedItemIds.current.has(item.id));
+      uniqueNewItems.forEach(item => fetchedItemIds.current.add(item.id));
+
+      setItems(prev => loadMore ? [...prev, ...uniqueNewItems] : uniqueNewItems);
+    } catch (err: any) {
+      console.error("Failed to fetch messages:", err);
+      setError(`Failed to load messages: ${err.message || "Unknown error"}`);
+      setHasMore(false); // Stop trying to load more if there's an error
+    } finally {
+      setIsLoading(false);
     }
-
-    const uniqueNewItems = newFetchedItems.filter(item => !fetchedItemIds.current.has(item.id));
-    uniqueNewItems.forEach(item => fetchedItemIds.current.add(item.id));
-
-    setItems(prev => loadMore ? [...prev, ...uniqueNewItems] : uniqueNewItems);
-    setIsLoading(false);
   }, [channel]);
 
   useEffect(() => {
@@ -118,14 +128,14 @@ export default function MessageList({ channel }: { channel: GuildChannel | DMCha
       return (
         <List.Item
           key={item.id}
-          title={item.content.substring(0, 100) + (item.content.length > 100 ? "..." : "")}
-          subtitle={item.author.username}
+          title={`${item.author.username}: ${item.content.substring(0, 100)}${item.content.length > 100 ? "..." : ""}`}
+          subtitle={item.createdAt.toLocaleString()}
           icon={item.author.displayAvatarURL()}
-          accessories={[{ text: item.createdAt.toLocaleString() }]}
-          detail={
-            <List.Item.Detail
-              markdown={formatMessageDetailMarkdown(item)}
-            />
+          actions={
+            <ActionPanel>
+              <Action.Push title="View Full Message" target={<MessageDetailView message={item} />} />
+              <Action.CopyToClipboard title="Copy Message" content={item.content} />
+            </ActionPanel>
           }
         />
       );
@@ -160,7 +170,6 @@ export default function MessageList({ channel }: { channel: GuildChannel | DMCha
     <List
       isLoading={isLoading}
       navigationTitle={`#${channel.name}`}
-      isShowingDetail={items.length > 0}
       actions={
         <ActionPanel>
           {(channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") && (
@@ -175,7 +184,13 @@ export default function MessageList({ channel }: { channel: GuildChannel | DMCha
         </ActionPanel>
       }
     >
-      {items.map(renderItem)}
+      {error ? (
+        <List.Item title="Error" subtitle={error} icon={Icon.Warning} />
+      ) : items.length === 0 && !isLoading ? (
+        <List.Item title="No messages found." />
+      ) : (
+        items.map(renderItem)
+      )}
     </List>
   );
 }
