@@ -166,7 +166,7 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
       return (
         <List.Item
           key={item.id}
-          title={`${dmNicknames[item.author.id] || item.author.displayName}: ${item.content.substring(0, 100)}${item.content.length > 100 ? "..." : ""}`}
+                    title={`${(dmNicknames && dmNicknames[item.author.id]) || item.author.displayName}: ${item.content.substring(0, 100)}${item.content.length > 100 ? "..." : ""}`}
           subtitle={item.createdAt.toLocaleString()}
           icon={item.author.displayAvatarURL()}
           accessories={[
@@ -177,8 +177,13 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
           ]}
           actions={
             <ActionPanel>
-              <Action.Push title="View Full Message" target={<MessageDetailView message={item} />} />
+              <Action.Push
+                title="Reply to Message"
+                target={<ReplyMessageForm channel={channel} message={item} onMessageSent={refresh} />}
+                icon={Icon.Reply}
+              />
               <Action.CopyToClipboard title="Copy Message" content={item.content} />
+              <Action.Push title="View Full Message" target={<MessageDetailView message={item} />} />
             </ActionPanel>
           }
         />
@@ -218,8 +223,9 @@ export function MessageList({ channel, dmNicknames }: { channel: GuildChannel | 
         <ActionPanel>
           {(channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") && (
             <Action.Push
-              title="Send Message"
+              title="Reply"
               target={<SendMessageForm channel={channel} onMessageSent={refresh} />}
+              shortcut={{ modifiers: ["cmd"], key: "enter" }}
             />
           )}
           {hasMore && (
@@ -266,6 +272,33 @@ function SendMessageForm({ channel, onMessageSent }: { channel: GuildChannel | D
       }
     >
       <Form.TextArea id="message" title="Message" placeholder="Type your message..." />
+    </Form>
+  );
+}
+
+function ReplyMessageForm({ channel, message, onMessageSent }: { channel: GuildChannel | DMChannel | ThreadChannel, message: Message, onMessageSent: () => void }) {
+  const { pop } = useNavigation();
+  const [replyContent, setReplyContent] = useState<string>("");
+
+  const handleSubmit = async (values: { replyContent: string }) => {
+    if (values.replyContent.trim().length === 0) return;
+    if (channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") {
+      await channel.send({ content: values.replyContent, reply: { messageReference: message.id } });
+      onMessageSent();
+    }
+    pop();
+  };
+
+  return (
+    <Form
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title="Reply" onSubmit={handleSubmit} />
+        </ActionPanel>
+      }
+    >
+      <Form.Description title="Replying to" text={`${message.author.username}: ${message.content.substring(0, 50)}...`} />
+      <Form.TextArea id="replyContent" title="Your Reply" placeholder="Type your reply..." value={replyContent} onChange={setReplyContent} />
     </Form>
   );
 }

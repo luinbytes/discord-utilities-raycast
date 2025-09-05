@@ -36,13 +36,7 @@
     },
     
     
-    {
-        "name": "profile",
-        "title": "My Discord Profile",
-        "description": "View your Discord profile.",
-        "mode": "view",
-        "path": "src/profile.tsx"
-    },
+    
     {
       "name": "refresh",
       "title": "Force Refresh Data",

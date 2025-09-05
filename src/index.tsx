@@ -112,7 +112,7 @@ export default function Command() {
           <ActionPanel>
             <Action.Push
               title="Show Channels"
-              target={<ChannelList guild={guild} />}
+              target={<ChannelList guildId={guild.id} />}
             />
             <Action
               icon={isPinned ? Icon.MinusCircle : Icon.Pin}

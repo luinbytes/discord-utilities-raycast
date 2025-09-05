@@ -20,8 +20,6 @@ declare namespace Preferences {
   export type Index = ExtensionPreferences & {}
   /** Preferences accessible in the `dms` command */
   export type Dms = ExtensionPreferences & {}
-  /** Preferences accessible in the `profile` command */
-  export type Profile = ExtensionPreferences & {}
   /** Preferences accessible in the `refresh` command */
   export type Refresh = ExtensionPreferences & {}
 }
@@ -31,8 +29,6 @@ declare namespace Arguments {
   export type Index = {}
   /** Arguments passed to the `dms` command */
   export type Dms = {}
-  /** Arguments passed to the `profile` command */
-  export type Profile = {}
   /** Arguments passed to the `refresh` command */
   export type Refresh = {}
 }
