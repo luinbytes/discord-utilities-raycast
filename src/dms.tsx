@@ -1,6 +1,6 @@
-import { Action, ActionPanel, List, Icon, Form, useNavigation } from "@raycast/api";
+import { Action, ActionPanel, List, Icon, Form, useNavigation, LocalStorage } from "@raycast/api";
 import { client } from "./utils/discord";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { DMChannel, Message } from "discord.js-selfbot-v13";
 import MessageList from "./components/MessageList";
 import { addPinnedDM, getPinnedDMs, removePinnedDM, getDmNicknames, setDmNickname, removeDmNickname, saveLastMessages, getLastMessages } from "./utils/storage";
@@ -13,6 +13,7 @@ export default function DmsCommand() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
   const [filter, setFilter] = useState("all");
+  const dataLoadedRef = useRef(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -73,10 +74,16 @@ export default function DmsCommand() {
   };
 
   useEffect(() => {
-    if (client.isReady()) {
-      loadData();
-    } else {
-      client.on("ready", loadData);
+    if (!dataLoadedRef.current) { // Only load data if not already loaded
+      if (client.isReady()) {
+        loadData();
+        dataLoadedRef.current = true; // Mark as loaded after initial call
+      } else {
+        client.on("ready", () => {
+          loadData();
+          dataLoadedRef.current = true; // Mark as loaded after initial call
+        });
+      }
     }
     return () => {
       client.off("ready", loadData);
@@ -84,18 +91,13 @@ export default function DmsCommand() {
   }, []);
 
   useEffect(() => {
-    const handleMessageCreate = (message: Message) => {
-      if (message.channel.type === "DM") {
-        setLastMessages((prev) => ({
-          ...prev,
-          [message.channel.id]: message,
-        }));
-        // Save updated messages to cache in the background
-        saveLastMessages({
-          ...lastMessages,
-          [message.channel.id]: message,
-        });
-      }
+    const handleMessageCreate = async (message: Message) => {
+      // Only handle direct messages
+      const channel = message.channel as DMChannel | undefined;
+      if (!channel || channel.type !== "DM") return;
+      const dmId = channel.id;
+      // Update last message for this DM in state
+      setLastMessages((prev) => ({ ...prev, [dmId]: message }));
     };
 
     client.on("messageCreate", handleMessageCreate);
@@ -103,20 +105,31 @@ export default function DmsCommand() {
     return () => {
       client.off("messageCreate", handleMessageCreate);
     };
-  }, [lastMessages]);
+  }, []);
 
   const sortedDms = useMemo(() => {
-    return [...dms].sort((a, b) => {
-      const aPinned = pinnedDMs.includes(a.id);
-      const bPinned = pinnedDMs.includes(b.id);
+    const pinned = [];
+    const unpinned = [];
 
-      if (aPinned && !bPinned) return -1;
-      if (!aPinned && bPinned) return 1;
+    for (const dm of dms) {
+      if (pinnedDMs.includes(dm.id)) {
+        pinned.push(dm);
+      } else {
+        unpinned.push(dm);
+      }
+    }
 
+    // Sort pinned DMs by their order in the pinnedDMs array
+    pinned.sort((a, b) => pinnedDMs.indexOf(a.id) - pinnedDMs.indexOf(b.id));
+
+    // Sort unpinned DMs by recent message
+    unpinned.sort((a, b) => {
       const aTimestamp = lastMessages[a.id]?.createdTimestamp || 0;
       const bTimestamp = lastMessages[b.id]?.createdTimestamp || 0;
       return bTimestamp - aTimestamp;
     });
+
+    return [...pinned, ...unpinned];
   }, [dms, pinnedDMs, lastMessages]);
 
   const [currentPage, setCurrentPage] = useState(0);
@@ -226,14 +239,14 @@ export default function DmsCommand() {
               icon={isPinned ? Icon.MinusCircle : Icon.Pin}
               title={isPinned ? "Unpin DM" : "Pin DM"}
               onAction={() => togglePin(dm.id)}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "u" }}
+              shortcut={{ modifiers: ["shift"], key: "." }}
             />
             {isPinned && (
               <Action
                 icon={Icon.ArrowUp}
                 title="Move Pinned DM Up"
                 onAction={() => movePinnedDMUp(dm.id)}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "arrowUp" }}
+                shortcut={{ modifiers: ["shift"], key: "arrowUp" }}
               />
             )}
             {isPinned && (
@@ -241,14 +254,14 @@ export default function DmsCommand() {
                 icon={Icon.ArrowDown}
                 title="Move Pinned DM Down"
                 onAction={() => movePinnedDMDown(dm.id)}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "arrowDown" }}
+                shortcut={{ modifiers: ["shift"], key: "arrowDown" }}
               />
             )}
             <Action.Push
               icon={Icon.Pencil}
               title="Set Nickname"
               target={<SetNicknameForm dm={dm} onNicknameSet={handleNicknameSet} />}
-              shortcut={{ modifiers: ["cmd"], key: "n" }}
+              shortcut={{ modifiers: ["shift"], key: "n" }}
             />
             {dmNicknames[dm.id] && (
               <Action
@@ -258,7 +271,7 @@ export default function DmsCommand() {
                   await removeDmNickname(dm.id);
                   await handleNicknameSet();
                 }}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
+                shortcut={{ modifiers: ["shift"], key: "n" }}
               />
             )}
           </ActionPanel>
