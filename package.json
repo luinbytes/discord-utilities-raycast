@@ -21,56 +21,42 @@
   ],
   "commands": [
     {
-      "name": "discord",
-      "title": "Discord Utilities",
-      "description": "Control Your Discord Client With Ease.",
+      "name": "index",
+      "title": "Discord Servers",
+      "description": "Interact with your Discord servers.",
       "mode": "view",
-      "path": "src/discord.tsx",
-      "icon": "command-icon.png"
+      "path": "src/index.tsx"
+    },
+    {
+        "name": "dms",
+        "title": "Discord DMs",
+        "description": "Interact with your Discord DMs.",
+        "mode": "view",
+        "path": "src/dms.tsx"
+    },
+    
+    
+    {
+        "name": "profile",
+        "title": "My Discord Profile",
+        "description": "View your Discord profile.",
+        "mode": "view",
+        "path": "src/profile.tsx"
     }
   ],
   "preferences": [
     {
-      "name": "preferredFlavor",
-      "title": "Preferred Flavor",
-      "type": "dropdown",
-      "description": "Which Discord flavor to use when invoking the global Open Discord action.",
-      "default": "stable",
-      "required": true,
-      "data": [
-        { "title": "Stable", "value": "stable" },
-        { "title": "PTB", "value": "ptb" },
-        { "title": "Canary", "value": "canary" }
-      ]
-    },
-    {
-      "name": "stablePath",
-      "title": "Stable Path Override",
-      "type": "textfield",
-      "description": "Optional full path to Update.exe or Discord.exe for Stable.",
-      "placeholder": "%LocalAppData%/Discord/Update.exe or Discord.exe",
-      "required": false
-    },
-    {
-      "name": "ptbPath",
-      "title": "PTB Path Override",
-      "type": "textfield",
-      "description": "Optional full path to Update.exe or DiscordPTB.exe for PTB.",
-      "placeholder": "%LocalAppData%/DiscordPTB/Update.exe or DiscordPTB.exe",
-      "required": false
-    },
-    {
-      "name": "canaryPath",
-      "title": "Canary Path Override",
-      "type": "textfield",
-      "description": "Optional full path to Update.exe or DiscordCanary.exe for Canary.",
-      "placeholder": "%LocalAppData%/DiscordCanary/Update.exe or DiscordCanary.exe",
-      "required": false
+      "name": "discordToken",
+      "title": "Discord Token",
+      "type": "password",
+      "description": "Your Discord user token. This is required for the extension to work. Be aware of the risks of using a user token.",
+      "required": true
     }
   ],
   "dependencies": {
     "@raycast/api": "^1.83.1",
     "@raycast/utils": "^1.17.0",
+    "discord.js-selfbot-v13": "^3.7.0",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
@@ -80,6 +66,7 @@
     "@types/react": "18.2.66",
     "@types/react-dom": "18.2.22",
     "eslint": "^8.57.0",
+    "ffmpeg-static": "^5.2.0",
     "prettier": "^3.2.5",
     "typescript": "^5.4.5"
   },

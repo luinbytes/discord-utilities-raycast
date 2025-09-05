@@ -8,26 +8,28 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 type ExtensionPreferences = {
-  /** Preferred Flavor - Which Discord flavor to use when invoking the global Open Discord action. */
-  "preferredFlavor": "stable" | "ptb" | "canary",
-  /** Stable Path Override - Optional full path to Update.exe or Discord.exe for Stable. */
-  "stablePath"?: string,
-  /** PTB Path Override - Optional full path to Update.exe or DiscordPTB.exe for PTB. */
-  "ptbPath"?: string,
-  /** Canary Path Override - Optional full path to Update.exe or DiscordCanary.exe for Canary. */
-  "canaryPath"?: string
+  /** Discord Token - Your Discord user token. This is required for the extension to work. Be aware of the risks of using a user token. */
+  "discordToken": string
 }
 
 /** Preferences accessible in all the extension's commands */
 declare type Preferences = ExtensionPreferences
 
 declare namespace Preferences {
-  /** Preferences accessible in the `discord` command */
-  export type Discord = ExtensionPreferences & {}
+  /** Preferences accessible in the `index` command */
+  export type Index = ExtensionPreferences & {}
+  /** Preferences accessible in the `dms` command */
+  export type Dms = ExtensionPreferences & {}
+  /** Preferences accessible in the `profile` command */
+  export type Profile = ExtensionPreferences & {}
 }
 
 declare namespace Arguments {
-  /** Arguments passed to the `discord` command */
-  export type Discord = {}
+  /** Arguments passed to the `index` command */
+  export type Index = {}
+  /** Arguments passed to the `dms` command */
+  export type Dms = {}
+  /** Arguments passed to the `profile` command */
+  export type Profile = {}
 }
 
