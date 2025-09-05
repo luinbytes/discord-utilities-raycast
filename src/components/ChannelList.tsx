@@ -1,7 +1,7 @@
 import { Action, ActionPanel, List, Icon, showToast, Toast, open } from "@raycast/api";
 import { Guild, GuildChannel, TextChannel, ForumChannel } from "discord.js-selfbot-v13";
 import { useEffect, useState } from "react";
-import MessageList from "./MessageList";
+import { MessageList } from "./MessageList";
 import { client } from "../utils/discord";
 
 export default function ChannelList({ guild }: { guild: Guild }) {

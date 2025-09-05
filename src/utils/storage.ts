@@ -12,6 +12,14 @@ interface CachedMessage {
   authorId: string;
   content: string;
   createdTimestamp: number;
+  embeds?: {
+    title?: string;
+    description?: string;
+    url?: string;
+    image?: { url: string };
+    fields?: { name: string; value: string }[];
+  }[];
+  attachments?: { id: string; name: string; url: string }[];
 }
 
 export async function getPinnedServers(): Promise<string[]> {
@@ -89,4 +97,43 @@ export async function saveLastMessages(messages: Record<string, Message | undefi
 export async function getLastMessages(): Promise<Record<string, CachedMessage>> {
   const cachedMessages = await LocalStorage.getItem<string>(LAST_MESSAGES_KEY);
   return cachedMessages ? JSON.parse(cachedMessages) : {};
+}
+
+export async function saveMessages(dmId: string, messages: Message[]): Promise<void> {
+  const serializableMessages: CachedMessage[] = messages.map(message => ({
+    id: message.id,
+    channelId: message.channelId,
+    authorId: message.author.id,
+    content: message.content,
+    createdTimestamp: message.createdTimestamp,
+    embeds: message.embeds.map(embed => ({
+      title: embed.title || undefined,
+      description: embed.description || undefined,
+      url: embed.url || undefined,
+      image: embed.image ? { url: embed.image.url } : undefined,
+      fields: embed.fields.map(field => ({ name: field.name, value: field.value })),
+    })),
+    attachments: Array.from(message.attachments.values()).map(attachment => ({
+      id: attachment.id,
+      name: attachment.name,
+      url: attachment.url,
+    })),
+  }));
+  await LocalStorage.setItem(`messages_${dmId}`, JSON.stringify(serializableMessages));
+}
+
+export async function getMessages(dmId: string): Promise<Message[]> {
+  const cached = await LocalStorage.getItem<string>(`messages_${dmId}`);
+  if (!cached) return [];
+  const parsed: CachedMessage[] = JSON.parse(cached);
+  // Convert CachedMessage back to Message-like objects for consistency with discord.js-selfbot-v13
+  return parsed.map(cachedMsg => ({
+    id: cachedMsg.id,
+    channelId: cachedMsg.channelId,
+    author: { id: cachedMsg.authorId }, // Simplified author for caching
+    content: cachedMsg.content,
+    createdTimestamp: cachedMsg.createdTimestamp,
+    embeds: cachedMsg.embeds || [],
+    attachments: new Map(cachedMsg.attachments?.map(att => [att.id, att as any])), // Convert back to Map for attachments
+  }) as Message); // Cast to Message as we only need specific properties for display
 }

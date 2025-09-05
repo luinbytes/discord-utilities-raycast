@@ -2,7 +2,7 @@ import { Action, ActionPanel, List, Icon, Form, useNavigation, LocalStorage } fr
 import { client } from "./utils/discord";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { DMChannel, Message } from "discord.js-selfbot-v13";
-import MessageList from "./components/MessageList";
+import { MessageList } from "./components/MessageList";
 import { addPinnedDM, getPinnedDMs, removePinnedDM, getDmNicknames, setDmNickname, removeDmNickname, saveLastMessages, getLastMessages } from "./utils/storage";
 
 export default function DmsCommand() {
@@ -97,7 +97,12 @@ export default function DmsCommand() {
       if (!channel || channel.type !== "DM") return;
       const dmId = channel.id;
       // Update last message for this DM in state
-      setLastMessages((prev) => ({ ...prev, [dmId]: message }));
+      setLastMessages((prev) => {
+        const newState = { ...prev, [dmId]: message };
+        // Persist the updated last messages to LocalStorage
+        saveLastMessages(newState); // <--- Add this line
+        return newState;
+      });
     };
 
     client.on("messageCreate", handleMessageCreate);
@@ -229,7 +234,7 @@ export default function DmsCommand() {
         accessories={accessories}
         actions={
           <ActionPanel>
-            <Action.Push title="Show Messages" target={<MessageList channel={dm} />} />
+            <Action.Push title="Show Messages" target={<MessageList channel={dm} dmNicknames={dmNicknames} />} />
             <Action.Push
               title="Quick Message"
               icon={Icon.Message}
