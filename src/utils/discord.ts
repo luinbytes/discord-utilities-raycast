@@ -9,14 +9,14 @@ if (!token) {
 }
 
 export const client = new Client({
-    checkUpdate: false,
-    ws: {
-        properties: {
-            $os: "windows",
-            $browser: "raycast",
-            $device: "raycast",
-        }
-    }
+  checkUpdate: false,
+  ws: {
+    properties: {
+      $os: "windows",
+      $browser: "raycast",
+      $device: "raycast",
+    },
+  },
 });
 
 client.login(token).catch((error) => {

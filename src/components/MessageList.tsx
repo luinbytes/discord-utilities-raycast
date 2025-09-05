@@ -1,10 +1,9 @@
-import { Action, ActionPanel, Form, List, useNavigation, Icon, Image } from "@raycast/api";
+import { Action, ActionPanel, Form, List, useNavigation, Icon } from "@raycast/api";
 import { DMChannel, GuildChannel, Message, ThreadChannel, ForumChannel, Embed } from "discord.js-selfbot-v13";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { client } from "../utils/discord";
 
 const MESSAGES_PER_PAGE = 20;
-const THREADS_PER_PAGE = 20;
 
 function formatMessageDetailMarkdown(message: Message): string {
   let markdown = `![Avatar](${message.author.displayAvatarURL()}) **${message.author.username}** - ${message.createdAt.toLocaleString()}\n\n${message.content}`;
@@ -33,47 +32,64 @@ function formatMessageDetailMarkdown(message: Message): string {
   return markdown;
 }
 
-export function MessageList({ channel }: { channel: GuildChannel | DMChannel | ThreadChannel }) {
+export default function MessageList({ channel }: { channel: GuildChannel | DMChannel | ThreadChannel }) {
   const [items, setItems] = useState<Array<Message | ThreadChannel>>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const fetchedItemIds = useRef(new Set<string>());
+  const lastItemId = useRef<string | undefined>();
 
-  const fetchItems = useCallback(async () => {
+  // Use a ref to track hasMore without causing useCallback to be unstable
+  const hasMoreRef = useRef(hasMore);
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+
+  const fetchItems = useCallback(async (loadMore = false) => {
+    if (loadMore && !hasMoreRef.current) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
-    let fetchedItems: Array<Message | ThreadChannel> = [];
+
+    const before = loadMore ? lastItemId.current : undefined;
+    let newFetchedItems: Array<Message | ThreadChannel> = [];
 
     if (channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") {
-      const messages = await channel.messages.fetch({ limit: MESSAGES_PER_PAGE, before: items.length > 0 ? items[items.length - 1].id : undefined });
-      fetchedItems = Array.from(messages.values());
-      setItems((prevItems) => [...prevItems, ...fetchedItems]);
+      const messages = await channel.messages.fetch({ limit: MESSAGES_PER_PAGE, before });
+      newFetchedItems = Array.from(messages.values());
       setHasMore(messages.size === MESSAGES_PER_PAGE);
+      if (messages.size > 0) {
+        lastItemId.current = messages.lastKey();
+      }
     } else if (channel.type === "GUILD_FORUM") {
-      const forumChannel = channel as ForumChannel;
-      const threads = await forumChannel.threads.fetchActive(true);
-      const newThreads = Array.from(threads.threads.values()).slice(page * THREADS_PER_PAGE, (page + 1) * THREADS_PER_PAGE);
-      fetchedItems = newThreads;
-      setItems((prevItems) => [...prevItems, ...fetchedItems]);
-      setHasMore(newThreads.length === THREADS_PER_PAGE);
+      if (!loadMore) {
+        const forumChannel = channel as ForumChannel;
+        const threads = await forumChannel.threads.fetchActive(true);
+        newFetchedItems = Array.from(threads.threads.values());
+      }
+      setHasMore(false);
     }
 
-    setIsLoading(false);
-  }, [channel, page, items]);
+    const uniqueNewItems = newFetchedItems.filter(item => !fetchedItemIds.current.has(item.id));
+    uniqueNewItems.forEach(item => fetchedItemIds.current.add(item.id));
 
-  useEffect(() => {
-    setItems([]); // Clear items when channel changes
-    setPage(0);
-    setHasMore(true);
+    setItems(prev => loadMore ? [...prev, ...uniqueNewItems] : uniqueNewItems);
+    setIsLoading(false);
   }, [channel]);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    lastItemId.current = undefined;
+    fetchedItemIds.current.clear();
+    setItems([]);
+    fetchItems(false);
+  }, [channel, fetchItems]);
 
   useEffect(() => {
     const messageCreateListener = (newMessage: Message) => {
-      if (newMessage.channel.id === channel.id) {
-        setItems((prevItems) => [newMessage, ...prevItems]); // Add new messages to the top
+      if (newMessage.channel.id === channel.id && !fetchedItemIds.current.has(newMessage.id)) {
+        setItems((prevItems) => [newMessage, ...prevItems]);
+        fetchedItemIds.current.add(newMessage.id);
       }
     };
 
@@ -85,7 +101,16 @@ export function MessageList({ channel }: { channel: GuildChannel | DMChannel | T
   }, [channel]);
 
   const handleLoadMore = () => {
-    setPage((prevPage) => prevPage + 1);
+    if (!isLoading) {
+      fetchItems(true);
+    }
+  };
+
+  const refresh = () => {
+    lastItemId.current = undefined;
+    fetchedItemIds.current.clear();
+    setItems([]);
+    fetchItems(false);
   };
 
   const renderItem = (item: Message | ThreadChannel) => {
@@ -133,15 +158,15 @@ export function MessageList({ channel }: { channel: GuildChannel | DMChannel | T
 
   return (
     <List
-      isShowingDetail
       isLoading={isLoading}
       navigationTitle={`#${channel.name}`}
+      isShowingDetail={items.length > 0}
       actions={
         <ActionPanel>
           {(channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") && (
             <Action.Push
               title="Send Message"
-              target={<SendMessageForm channel={channel} onMessageSent={fetchItems} />}
+              target={<SendMessageForm channel={channel} onMessageSent={refresh} />}
             />
           )}
           {hasMore && (
@@ -159,9 +184,10 @@ function SendMessageForm({ channel, onMessageSent }: { channel: GuildChannel | D
   const { pop } = useNavigation();
 
   const handleSubmit = async (values: { message: string }) => {
+    if (values.message.trim().length === 0) return;
     if (channel.type === "DM" || channel.type === "GUILD_TEXT" || channel.type === "GUILD_PUBLIC_THREAD" || channel.type === "GUILD_PRIVATE_THREAD") {
       await channel.send(values.message);
-      onMessageSent(); // Trigger a re-fetch to get the latest messages including the sent one
+      onMessageSent();
     }
     pop();
   };
@@ -174,7 +200,7 @@ function SendMessageForm({ channel, onMessageSent }: { channel: GuildChannel | D
         </ActionPanel>
       }
     >
-      <Form.TextField id="message" title="Message" />
+      <Form.TextArea id="message" title="Message" placeholder="Type your message..." />
     </Form>
   );
 }

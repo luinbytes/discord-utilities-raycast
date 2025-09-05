@@ -1,8 +1,18 @@
 import { LocalStorage } from "@raycast/api";
+import { Message } from "discord.js-selfbot-v13";
 
 const PINNED_SERVERS_KEY = "pinnedServers";
 const PINNED_DMS_KEY = "pinnedDMs";
 const DM_NICKNAMES_KEY = "dmNicknames";
+const LAST_MESSAGES_KEY = "lastMessages";
+
+interface CachedMessage {
+  id: string;
+  channelId: string;
+  authorId: string;
+  content: string;
+  createdTimestamp: number;
+}
 
 export async function getPinnedServers(): Promise<string[]> {
   const pinnedServers = await LocalStorage.getItem<string>(PINNED_SERVERS_KEY);
@@ -57,4 +67,26 @@ export async function removeDmNickname(dmId: string): Promise<void> {
   const dmNicknames = await getDmNicknames();
   delete dmNicknames[dmId];
   await LocalStorage.setItem(DM_NICKNAMES_KEY, JSON.stringify(dmNicknames));
+}
+
+export async function saveLastMessages(messages: Record<string, Message | undefined>): Promise<void> {
+  const serializableMessages: Record<string, CachedMessage> = {};
+  for (const dmId in messages) {
+    const message = messages[dmId];
+    if (message) {
+      serializableMessages[dmId] = {
+        id: message.id,
+        channelId: message.channelId,
+        authorId: message.author.id,
+        content: message.content,
+        createdTimestamp: message.createdTimestamp,
+      };
+    }
+  }
+  await LocalStorage.setItem(LAST_MESSAGES_KEY, JSON.stringify(serializableMessages));
+}
+
+export async function getLastMessages(): Promise<Record<string, CachedMessage>> {
+  const cachedMessages = await LocalStorage.getItem<string>(LAST_MESSAGES_KEY);
+  return cachedMessages ? JSON.parse(cachedMessages) : {};
 }

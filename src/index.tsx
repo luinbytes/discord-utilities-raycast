@@ -2,7 +2,7 @@ import { Action, ActionPanel, Grid, Icon } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { client } from "./utils/discord";
 import { Guild } from "discord.js-selfbot-v13";
-import { ChannelList } from "./components/ChannelList";
+import ChannelList from "./components/ChannelList";
 import { addPinnedServer, getPinnedServers, removePinnedServer } from "./utils/storage";
 
 export default function Command() {
